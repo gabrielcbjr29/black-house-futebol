@@ -43,6 +43,8 @@ create table if not exists public.strategy_picks (
   first_at timestamptz default now(), updated_at timestamptz default now(),
   risk text, p_now numeric, risk_at timestamptz, alerted boolean not null default false,
   unique (date, strategy_id, pid, mk));
+create index if not exists strategy_picks_status on public.strategy_picks (status, date);
+create index if not exists strategy_picks_strategy on public.strategy_picks (strategy_id);
 -- CLV no mercado de MAIS: a linha que SOBE depois da entrada é a nosso favor (pegamos a mais baixa).
 -- clv_line = linha da entrada − linha de fechamento (negativo = a linha subiu = bom) → ver a view abaixo.
 
