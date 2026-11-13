@@ -45,3 +45,11 @@ test('validação walk-forward: sem viés grande na média (dados simulados)', (
   const r = walkForward(synthHistory({ seed: 9, rounds: 20, nTeams: 10 }), { minTrain: 50 });
   for (const mk of ['SH', 'FC', 'TK']) assert.ok(Math.abs(r[mk].media_prevista / r[mk].media_real - 1) < 0.08, `${mk} ${r[mk].media_prevista}/${r[mk].media_real}`);
 });
+test('calibração: k escolhido pelo menor erro recupera a dispersão verdadeira', async () => {
+  const { bestK } = await import('../collector/calibrate.js');
+  const { rng, nbSample } = await import('../collector/demo.js');
+  const r = rng(17), mus = [], vals = [];
+  for (let i = 0; i < 6000; i++) { const mu = 0.4 + 2 * r(); mus.push(mu); vals.push(nbSample(r, mu, 5)); }
+  const k = bestK(mus, vals, [0.5, 1.5, 2.5]);
+  assert.ok(k >= 3 && k <= 10, `k=${k}`);
+});

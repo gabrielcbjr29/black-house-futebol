@@ -124,6 +124,25 @@ async function main() {
     console.log(`${lg.key} ${s}: +${ok} jogos (${Object.keys(file.fixtures).length}/${list.length})${missing.length > batch.length ? ' · continua na próxima execução' : ''}`);
     if (api.st.used >= api.st.max - 2) break outer;
   }
+  // reparo: jogos guardados sem a estatística do time (pedido que falhou no limite por minuto): busca de novo
+  let reparados = 0;
+  repair: for (const s of [...HIST_SEASONS].reverse()) for (const lg of LEAGUES) {
+    const file = loadFile(lg, s), skip = file.skip ??= {};
+    const bad = Object.values(file.fixtures).filter(r => Object.keys(r.t ?? {}).length < 2 && (skip['t' + r.id] ?? 0) < 3);
+    if (!bad.length) continue;
+    const left = api.st.remaining == null ? Infinity : api.st.remaining - RESERVE;
+    const batch = bad.slice(0, Math.max(0, Math.min(api.st.max - api.st.used, left)));
+    if (!batch.length) break repair;
+    await pool(batch, 4, async r => {
+      try {
+        const st = await api.fixtureStats(r.id);
+        const fix = ingestFixture({ fixture: { id: r.id, date: r.d }, league: { id: r.lg, season: r.s }, teams: { home: { id: r.h }, away: { id: r.a } } }, [], st).rec;
+        if (Object.keys(fix.t).length === 2) { r.t = fix.t; r.t1 = fix.t1; reparados++; } else skip['t' + r.id] = (skip['t' + r.id] ?? 0) + 1;
+      } catch { /* tenta na próxima */ }
+    });
+    saveFile(lg, s, file);
+  }
+  if (reparados) console.log(`reparo: ${reparados} jogos com a estatística do time recuperada`);
   console.log(`histórico: ${novos} jogos novos · ${api.st.used} pedidos${api.st.limited ? ` · ${api.st.limited} esperas por limite/minuto` : ''}${api.st.remaining != null ? ` · cota restante hoje ${api.st.remaining}` : ''}`);
 }
 if (import.meta.url === `file://${process.argv[1]}`) main().catch(e => { console.error(e); process.exit(1); });

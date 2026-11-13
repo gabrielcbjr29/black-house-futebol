@@ -32,7 +32,16 @@ export const MARKETS = {
 /* aplica o k sugerido pela validação (calib.json) nos mercados com amostra grande; devolve o que mudou */
 export function applyCalib(calib, minN = 2000) {
   const used = [];
-  for (const [mk, x] of Object.entries(calib?.mercados ?? {})) if (MARKETS[mk] && x.n >= minN && x.k_sugerido > 0.5) { MARKETS[mk].k = Math.min(x.k_sugerido, 400); used.push(`${mk} ${x.k_sugerido}`); }
+  for (const [mk, x] of Object.entries(calib?.mercados ?? {})) {
+    if (!MARKETS[mk] || x.n < minN) continue;
+    if (x.k_sugerido > 0.5) MARKETS[mk].k = Math.min(x.k_sugerido, 400);
+    // fator de calibração da média (real ÷ previsto na validação), limitado a ±25%
+    if (x.fator > 0) MARKETS[mk].cf = clamp(x.fator, 0.75, 1.25);
+    used.push(`${mk} k ${MARKETS[mk].k} × ${(MARKETS[mk].cf ?? 1).toFixed(3)}`);
+  }
+  // o 1º tempo herda o fator do jogo todo (não há dado por jogador para validar)
+  if (MARKETS.SH.cf) MARKETS.SH1.cf = MARKETS.SH.cf;
+  if (MARKETS.SOT.cf) MARKETS.SOT1.cf = MARKETS.SOT.cf;
   return used;
 }
 export const PLAYER_MK = Object.keys(MARKETS).filter(k => MARKETS[k].kind === 'p');
@@ -93,6 +102,10 @@ export function playerContext(mine, theirs, tAvg) {
    pp = perfil do jogador: r (taxas por 90), ms (minutos quando titular), mb (minutos quando entra do banco), sr (taxa de defesa do goleiro)
    Devolve { start, bench } = média se for titular / se entrar do banco. */
 export function playerMu(pp, mk, ctx, L = LEAGUE_PRIOR) {
+  const M = MARKETS[mk], cf = M.cf ?? 1, r = playerMuRaw(pp, mk, ctx, L);
+  return { start: r.start * cf, bench: r.bench * cf };
+}
+function playerMuRaw(pp, mk, ctx, L) {
   const M = MARKETS[mk], st = M.st;
   if (mk === 'SV') {
     // goleiro: chutes no gol do adversário hoje × taxa de defesa dele (goleiro só joga de titular)
