@@ -81,7 +81,10 @@ async function main() {
   const api = client({ max: +(process.env.HIST_MAX_RUN || 1500) });
   const today = new Date().toISOString().slice(0, 10);
   let novos = 0;
+  // reserva da cota diária para a coleta do dia (jogos, escalações, desfalques): o histórico para antes dela
+  const RESERVE = +(process.env.HIST_RESERVE || 800);
   outer: for (const s of [...HIST_SEASONS].reverse()) for (const lg of LEAGUES) {
+    if (api.st.remaining != null && api.st.remaining < RESERVE) { console.log(`parando: cota restante ${api.st.remaining} (reserva ${RESERVE})`); break; }
     const file = loadFile(lg, s);
     if (file.complete) continue; // temporada passada já guardada inteira
     let list;
@@ -95,15 +98,16 @@ async function main() {
       if (s < Math.max(...HIST_SEASONS) && list.length && !file.complete) { file.complete = true; saveFile(lg, s, file); }
       console.log(`${lg.key} ${s}: completo (${list.length} jogos)`); continue;
     }
-    const budget = Math.max(0, Math.floor((api.st.max - api.st.used) / 2));
+    const left = api.st.remaining == null ? Infinity : api.st.remaining - RESERVE;
+    const budget = Math.max(0, Math.floor(Math.min(api.st.max - api.st.used, left) / 2));
     const batch = missing.slice(0, budget);
     const res = await pool(batch, 4, async fx => {
       const [pl, st] = await Promise.all([api.fixturePlayers(fx.fixture.id), api.fixtureStats(fx.fixture.id).catch(() => [])]);
       return ingestFixture(fx, pl, st);
     });
-    let ok = 0;
+    let ok = 0, falhas = 0;
     for (const r of res) {
-      if (!r || r.__error || !r.rec.p.length) continue; // jogo sem estatística de jogador: tenta de novo na próxima
+      if (!r || r.__error || !r.rec.p.length) { falhas++; if (r?.__error && falhas <= 2) console.log(`  falha: ${r.__error.message}`); continue; } // jogo sem estatística de jogador: tenta de novo na próxima
       file.fixtures[r.rec.id] = r.rec; Object.assign(file.players, r.names); Object.assign(file.teams, r.tnames); ok++;
     }
     saveFile(lg, s, file);
@@ -111,6 +115,6 @@ async function main() {
     console.log(`${lg.key} ${s}: +${ok} jogos (${Object.keys(file.fixtures).length}/${list.length})${missing.length > batch.length ? ' · continua na próxima execução' : ''}`);
     if (api.st.used >= api.st.max - 2) break outer;
   }
-  console.log(`histórico: ${novos} jogos novos · ${api.st.used} pedidos${api.st.remaining != null ? ` · cota restante hoje ${api.st.remaining}` : ''}`);
+  console.log(`histórico: ${novos} jogos novos · ${api.st.used} pedidos${api.st.limited ? ` · ${api.st.limited} esperas por limite/minuto` : ''}${api.st.remaining != null ? ` · cota restante hoje ${api.st.remaining}` : ''}`);
 }
 if (import.meta.url === `file://${process.argv[1]}`) main().catch(e => { console.error(e); process.exit(1); });
