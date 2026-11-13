@@ -261,7 +261,8 @@ Deno.serve(async (req: Request) => {
     const secret = await cfg('WEBHOOK_SECRET');
     if (u.searchParams.get('setup')) {
       if (u.searchParams.get('setup') !== secret) return new Response('senha errada', { status: 403 });
-      const hook = await TG('setWebhook', { url: `${u.origin}${u.pathname}`, secret_token: secret, allowed_updates: ['message', 'callback_query'] });
+      // dentro do Supabase o pedido chega como http: o endereço público (https) vem de SUPABASE_URL
+      const hook = await TG('setWebhook', { url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/telegram-bot`, secret_token: secret, allowed_updates: ['message', 'callback_query'] });
       const cmds = await TG('setMyCommands', { commands: [['top', 'Top 10 pela Nota BH'], ['valor', 'Maior valor esperado'], ['chutes', 'Chutes'], ['nogol', 'Chutes ao gol'], ['chutes1t', 'Chutes no 1º tempo'], ['nogol1t', 'Chutes ao gol no 1º tempo'], ['faltas', 'Faltas cometidas'], ['sofridas', 'Faltas sofridas'], ['desarmes', 'Desarmes'], ['defesas', 'Defesas do goleiro'], ['times', 'Times e jogo'], ['jogos', 'Jogos de hoje'], ['modelo', 'Chance em qualquer linha'], ['estrategias', 'Placar das estratégias'], ['gabarito', 'Gabarito de ontem'], ['banca', 'Sua banca'], ['receber', 'Ligar/desligar alertas'], ['ajuda', 'Comandos']].map(([command, description]) => ({ command, description })) });
       return new Response(JSON.stringify({ hook, cmds }), { headers: { 'Content-Type': 'application/json' } });
     }
