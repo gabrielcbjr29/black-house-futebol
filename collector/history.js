@@ -55,7 +55,7 @@ export function ingestFixture(fx, playersResp = [], statsResp = []) {
 export function fileOf(lg, season, ext = 'ndjson') { return new URL(`${lg.key}-${season}.${ext}`, HIST_DIR); }
 export function loadFile(lg, season) {
   const f = fileOf(lg, season), fn = fileOf(lg, season, 'names.json');
-  const out = { lg: lg.id, season, fixtures: {}, players: {}, teams: {}, complete: false };
+  const out = { lg: lg.id, season, fixtures: {}, players: {}, teams: {}, complete: false, skip: {} };
   if (existsSync(f)) for (const l of readFileSync(f, 'utf8').split('\n')) if (l.trim()) { const r = JSON.parse(l); out.fixtures[r.id] = r; }
   if (existsSync(fn)) Object.assign(out, JSON.parse(readFileSync(fn, 'utf8')));
   return out;
@@ -63,7 +63,7 @@ export function loadFile(lg, season) {
 export function saveFile(lg, season, file) {
   const recs = Object.values(file.fixtures).sort((a, b) => a.d.localeCompare(b.d) || a.id - b.id);
   writeFileSync(fileOf(lg, season), recs.map(r => JSON.stringify(r)).join('\n') + (recs.length ? '\n' : ''));
-  writeFileSync(fileOf(lg, season, 'names.json'), JSON.stringify({ players: file.players, teams: file.teams, complete: file.complete }));
+  writeFileSync(fileOf(lg, season, 'names.json'), JSON.stringify({ players: file.players, teams: file.teams, complete: file.complete, skip: file.skip ?? {} }));
 }
 // junta todas as ligas e temporadas num só histórico (ordem: do jogo mais antigo para o mais novo)
 export function loadHistory() {
@@ -90,12 +90,16 @@ async function main() {
     let list;
     try { list = await api.fixturesRange(lg.id, s, `${s - 1}-07-01`, today, FINISHED); }
     catch (e) { console.log(`${lg.key} ${s}: lista falhou (${e.message})`); if (e.quota) break outer; continue; }
-    const missing = list.filter(fx => !file.fixtures[fx.fixture.id]);
+    // jogo sem estatística de jogador na API (fases preliminares, por exemplo): desiste depois de 3 tentativas
+    const skip = file.skip ??= {}, MAX_TRIES = 3;
+    const missing = list.filter(fx => !file.fixtures[fx.fixture.id] && (skip[fx.fixture.id] ?? 0) < MAX_TRIES);
     // os mais recentes primeiro: são os que mais pesam no modelo e os que conferem as entradas de ontem
     missing.sort((a, b) => b.fixture.date.localeCompare(a.fixture.date));
     if (!missing.length) {
       // temporada passada encerrada e inteira no arquivo: não lista mais (economiza a cota)
       if (s < Math.max(...HIST_SEASONS) && list.length && !file.complete) { file.complete = true; saveFile(lg, s, file); }
+      const sem = list.filter(fx => !file.fixtures[fx.fixture.id]).length;
+      if (sem) { console.log(`${lg.key} ${s}: completo (${list.length - sem} jogos + ${sem} sem estatística de jogador na API)`); continue; }
       console.log(`${lg.key} ${s}: completo (${list.length} jogos)`); continue;
     }
     const left = api.st.remaining == null ? Infinity : api.st.remaining - RESERVE;
@@ -107,7 +111,12 @@ async function main() {
     });
     let ok = 0, falhas = 0;
     for (const r of res) {
-      if (!r || r.__error || !r.rec.p.length) { falhas++; if (r?.__error && falhas <= 2) console.log(`  falha: ${r.__error.message}`); continue; } // jogo sem estatística de jogador: tenta de novo na próxima
+      if (!r || r.__error) { falhas++; if (falhas <= 2) console.log(`  falha: ${r?.__error?.message}`); continue; }
+      if (!r.rec.p.length) {
+        // só conta tentativa quando o jogo já tem mais de 2 dias (a estatística pode demorar a sair)
+        if (Date.now() - Date.parse(r.rec.d) > 2 * 864e5) skip[r.rec.id] = (skip[r.rec.id] ?? 0) + 1;
+        continue;
+      } // jogo sem estatística de jogador: tenta de novo na próxima
       file.fixtures[r.rec.id] = r.rec; Object.assign(file.players, r.names); Object.assign(file.teams, r.tnames); ok++;
     }
     saveFile(lg, s, file);
