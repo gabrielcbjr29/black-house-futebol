@@ -30,7 +30,7 @@ export function pickStrategies(bot) {
     for (const r of rows) {
       const key = r.id + '|' + r.m; if (seen.has(key)) continue; seen.add(key);
       out.push({ strategy_id: S.id, pid: r.id, name: r.n, team: r.t, opp: r.o, gid: r.g, mk: r.m, side: 'o', line: r.l, odd: r.d,
-        odd_src: r.b, p: r.p, edge: Math.round(edgeOf(r) * 1e4) / 1e4, nota: r.nt, tip_utc: r.utc, fase: r.fase });
+        odd_src: r.b, p: r.p, edge: Math.round(edgeOf(r) * 1e4) / 1e4, nota: r.nt, tip_utc: r.utc, fase: r.fase, sq: r.sq?.length ? r.sq : (r.jh ?? null) });
       if (++k >= S.max) break;
     }
   }

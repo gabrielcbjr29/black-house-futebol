@@ -98,3 +98,33 @@ insert into public.bot_config (key, value) values
   ('LINHAS_TOKEN', replace(gen_random_uuid()::text, '-', '')),
   ('ALERT_EV', '0.05')
 on conflict (key) do nothing;
+
+-- ---------- visual do bot igual ao da NBA (13/11) ----------
+alter table public.strategy_picks add column if not exists sq jsonb;          -- sequência dos últimos 10 (🟩🟥)
+alter table public.bets add column if not exists ref_line numeric;            -- linha sugerida (a da casa pode ser outra)
+alter table public.bot_subs add column if not exists chutes boolean not null default true;  -- Top 10 Chutes
+alter table public.bot_subs add column if not exists faltas boolean not null default true;  -- Top 10 Faltas e desarmes
+
+-- Top 10 automático (cada lista independente; o mesmo jogador não repete na mesma lista no mesmo dia)
+create table if not exists public.top_picks (
+  id bigserial primary key, created_at timestamptz default now(), date text not null,
+  list text not null check (list in ('chutes','faltas')), rank int not null,
+  pid text not null, name text not null, team text, opp text, gid bigint, mk text not null,
+  line numeric not null, side text not null default 'o' check (side = 'o'), p numeric, nota int,
+  status text not null default 'aberta' check (status in ('aberta','green','red','void')),
+  result numeric, settled_at timestamptz, odd numeric, odd_src text, profit numeric, ref_line numeric,
+  first_at timestamptz default now(), updated_at timestamptz default now(), tip_utc timestamptz,
+  open_line numeric, open_odd numeric,
+  clv_line numeric generated always as (case when open_line is null then null else open_line - line end) stored,
+  clv_odd numeric generated always as (case when open_odd is null or odd is null or open_line is distinct from line then null else round(open_odd / odd - 1, 4) end) stored,
+  unique (date, list, pid, mk));
+alter table public.top_picks enable row level security;
+create or replace function public.top_picks_keep_open() returns trigger language plpgsql set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then new.open_line := coalesce(new.open_line, new.line); new.open_odd := coalesce(new.open_odd, new.odd);
+  else new.open_line := coalesce(old.open_line, old.line); new.open_odd := coalesce(old.open_odd, old.odd); new.first_at := old.first_at; end if;
+  return new;
+end $$;
+drop trigger if exists top_picks_keep_open on public.top_picks;
+create trigger top_picks_keep_open before insert or update on public.top_picks for each row execute function public.top_picks_keep_open();
+create unique index if not exists model_tests_uniq on public.model_tests (chat_id, date, pid, mk, line);

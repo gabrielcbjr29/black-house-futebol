@@ -16,39 +16,42 @@ function indexLines(lines) {
   return idx;
 }
 const hitRate = (vals, line) => vals.length ? [vals.filter(v => v > line).length, vals.length] : null;
+// valores de uma estatística nos jogos em que ele foi titular de fato (60+ min), do mais recente para o mais antigo
+const starts = (sq, st) => (sq?.[st] ?? []).filter((_, i) => (sq.mn?.[i] ?? 0) >= 60).slice(0, 10);
 
 export function buildBotData(slate, lines = new Map(), { houses = [] } = {}) {
   const G = Object.fromEntries(slate.games.map(g => [g.id, g]));
   const idx = indexLines(lines), rows = [];
   const push = (base, mk, probAt, cand, extra) => {
+    const v = extra.vals ?? [];
     for (const c of cand) {
       const p = probAt(c.line), best = c.offers[0];
       const e = best ? ev(p, best.odd) : null;
-      const nt = notaBH({ p, e, hit: extra.hit?.(c.line), ctx: extra.ctx, cert: extra.cert });
-      const h = extra.hit ? extra.hitArr(c.line) : null;
+      const h10 = hitRate(v.slice(0, 10), c.line), h5 = hitRate(v.slice(0, 5), c.line);
+      const nt = notaBH({ p, e, hit: h10 && h10[1] >= 3 ? h10[0] / h10[1] : null, ctx: extra.ctx, cert: extra.cert });
       rows.push({ ...base, m: mk, s: 'o', l: c.line, p: r3(p), d: best?.odd ?? null, b: best?.house ?? null,
         of: c.offers.length > 1 ? c.offers.map(o => [o.house, o.odd]) : undefined, e: e == null ? null : r3(e),
-        hit: h, nt, gr: grade(nt), ref: c.offers.length ? undefined : 1 });
+        hit: h10, h5, nt, gr: grade(nt), ref: c.offers.length ? undefined : 1 });
     }
   };
   // ---------- jogadores ----------
   for (const [pid, P] of Object.entries(slate.model.players)) {
     const g = G[P.g]; if (!g) continue;
     const mine = g.home.id === P.t ? g.home : g.away, opp = g.home.id === P.t ? g.away : g.home;
-    const base = { id: pid, n: P.n, t: mine.name, o: opp.name, home: P.home, g: g.id, lg: g.lg, utc: g.utc, fase: g.fase, pos: P.pos, ps: P.ps, st: P.st, k: 'p' };
+    const base = { id: pid, n: P.n, t: mine.name, o: opp.name, home: P.home, g: g.id, lg: g.lg, utc: g.utc, fase: g.fase, pos: P.pos, ps: P.ps, st: P.st, k: 'p', ms: P.ms };
     const cert = P.st === 'xi' ? 1 : P.st === 'banco' ? 0.3 : P.ps;
     for (const [mk, [s, b]] of Object.entries(P.mu)) {
       const M = MARKETS[mk]; if (s < 0.04) continue;
       const mu = { start: s, bench: b };
       const probAt = l => playerOver(mu, mk, l, P.ps, P.pb);
-      // acertos recentes na linha: só nos jogos em que ele foi titular de fato (60+ min); 1º tempo não tem histórico por jogador
-      const vals = M.h1 ? [] : (P.sq?.[M.st] ?? []).filter((_, i) => (P.sq.mn?.[i] ?? 0) >= 60);
+      // sequência e acertos: só nos jogos em que ele foi titular de fato (60+ min), do mais recente para o mais antigo.
+      // 1º tempo: não há dado por jogador, então sem sequência.
+      const vals = M.h1 ? [] : starts(P.sq, M.st);
       const house = idx.get(`${g.id}|${pid}|${mk}`);
       const ref = house ? null : refLine(probAt, M.lines);
       const cand = house ?? (ref ? [{ line: ref.l, offers: [] }] : []);
-      push({ ...base, pj: r3(P.ps * s + (1 - P.ps) * b), sq: (P.sq?.[M.st] ?? []).slice(0, 10), mn: (P.sq?.mn ?? []).slice(0, 10) }, mk, probAt, cand, {
-        ctx: P.ctx?.[M.st] ?? 1, cert,
-        hit: vals.length >= 3 ? l => hitRate(vals, l)[0] / vals.length : null, hitArr: l => hitRate(vals, l),
+      push({ ...base, pj: r3(P.ps * s + (1 - P.ps) * b), ps1: r3(s), sq: vals, cx: P.ctx?.[M.st] ?? 1 }, mk, probAt, cand, {
+        ctx: P.ctx?.[M.st] ?? 1, cert, vals,
       });
     }
   }
@@ -64,26 +67,39 @@ export function buildBotData(slate, lines = new Map(), { houses = [] } = {}) {
         const id = `t${team.id}-${gid}`, house = idx.get(`${gid}|${id}|${tmk}`);
         const ref = house ? null : refLine(probAt, teamLines(mu));
         push({ id, n: team.name, t: team.name, o: opp.name, home: side === 'h', g: g.id, lg: g.lg, utc: g.utc, fase: g.fase, k: 't', pj: r3(mu), sq: vals }, tmk, probAt,
-          house ?? (ref ? [{ line: ref.l, offers: [] }] : []), { ctx: 1, cert: 1, hit: vals.length >= 3 ? l => hitRate(vals, l)[0] / vals.length : null, hitArr: l => hitRate(vals, l) });
+          house ?? (ref ? [{ line: ref.l, offers: [] }] : []), { ctx: 1, cert: 1, vals });
       }
       // total do jogo: soma dos dois times (dispersão da soma, sem passar do teto do mercado)
       const mh = T.pj.h[st], ma = T.pj.a[st], k = Math.min(sumK(mh, MARKETS[tmk].k, ma, MARKETS[tmk].k), MARKETS[jmk].k);
       const mu = mh + ma, probAt = l => nbOver(mu, k, l);
       const id = `j${gid}`, house = idx.get(`${gid}|${id}|${jmk}`);
       const ref = house ? null : refLine(probAt, teamLines(mu));
-      push({ id, n: `${g.home.name} x ${g.away.name}`, t: g.home.name, o: g.away.name, home: true, g: g.id, lg: g.lg, utc: g.utc, fase: g.fase, k: 'j', pj: r3(mu) }, jmk, probAt,
-        house ?? (ref ? [{ line: ref.l, offers: [] }] : []), { ctx: 1, cert: 1 });
+      // jogo: total dos últimos jogos de cada time (com os adversários que eles tiveram)
+      const tot = side => (T.last?.[side] ?? []).map(x => x[STI[st]] + x[STI[st] + 3]);
+      push({ id, n: `${g.home.name} x ${g.away.name}`, t: g.home.name, o: g.away.name, home: true, g: g.id, lg: g.lg, utc: g.utc, fase: g.fase, k: 'j', pj: r3(mu), jh: tot('h'), ja: tot('a') }, jmk, probAt,
+        house ?? (ref ? [{ line: ref.l, offers: [] }] : []), { ctx: 1, cert: 1, vals: [...tot('h').slice(0, 5), ...tot('a').slice(0, 5)] });
     }
   }
   rows.sort((a, b) => (b.nt - a.nt) || ((b.e ?? -1) - (a.e ?? -1)));
-  // modelo compacto para o /modelo do bot (chance em qualquer linha)
+  // modelo compacto para o /modelo do bot (chance em qualquer linha) e sequência como titular de cada estatística
   const mdl = {
-    p: Object.fromEntries(Object.entries(slate.model.players).map(([pid, P]) => [pid, { n: P.n, t: P.t, g: P.g, pos: P.pos, ps: P.ps, pb: P.pb, st: P.st, mu: P.mu }])),
-    t: Object.fromEntries(Object.entries(slate.model.teams).map(([gid, T]) => [gid, { h: T.h, a: T.a, hn: T.hn, an: T.an, pj: T.pj }])),
+    p: Object.fromEntries(Object.entries(slate.model.players).map(([pid, P]) => {
+      const g = G[P.g], mine = g?.home.id === P.t ? g?.home : g?.away, opp = g?.home.id === P.t ? g?.away : g?.home;
+      return [pid, { n: P.n, t: P.t, tn: mine?.name, on: opp?.name, home: P.home, g: P.g, utc: g?.utc, pos: P.pos, ps: P.ps, pb: P.pb, st: P.st, ms: P.ms, mu: P.mu,
+        sq: Object.fromEntries(['sh', 'sot', 'fc', 'fs', 'tk', 'sv'].map(k => [k, starts(P.sq, k)])) }];
+    })),
+    t: Object.fromEntries(Object.entries(slate.model.teams).map(([gid, T]) => [gid, { h: T.h, a: T.a, hn: T.hn, an: T.an, pj: T.pj, ref: T.ref, rf: T.rf }])),
   };
+  // cards em imagem: as melhores do dia (uma por jogador, odds 1,40–3,50)
+  const seen = new Set(); let nc = 0;
+  for (const r of rows) {
+    if (nc >= 12) break;
+    const o = r.d ?? 1 / r.p; if (r.k !== 'p' || o < 1.4 || o > 3.5 || seen.has(r.id)) continue;
+    seen.add(r.id); r.cd = 1; nc++;
+  }
   return {
     date: slate.date, gen: slate.gen,
     games: slate.games.map(g => ({ id: g.id, lg: g.lg, utc: g.utc, st: g.status, h: g.home.name, a: g.away.name, hid: g.home.id, aid: g.away.id, fase: g.fase, ref: g.ref || null })),
-    injuries: slate.injuries, houses, rows, mdl, ks: Object.fromEntries(Object.entries(MARKETS).map(([k, v]) => [k, v.k])),
+    injuries: slate.injuries, inj: slate.inj ?? [], houses, rows, mdl, ks: Object.fromEntries(Object.entries(MARKETS).map(([k, v]) => [k, v.k])),
   };
 }

@@ -26,6 +26,12 @@ const n2 = (x: number) => x.toFixed(2).replace('.', ',');
 const pct = (x: number) => (x >= 0 ? '+' : '') + (x * 100).toFixed(1).replace('.', ',') + '%';
 const hourBR = (iso: string) => new Date(iso).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
 const FOOT = '<i>🔞 18+ · Aposte com responsabilidade. Apostas podem causar dependência.</i>';
+// últimos 10 como titular, do mais recente para o mais antigo: 🟩 bateu, 🟥 não bateu
+function sqLine(vals: any, line: number) {
+  const v = (Array.isArray(vals) ? vals : []).slice(0, 10).map(Number); if (!v.length) return '';
+  let hit = 0; const dots = v.map(x => { const ok = x > line; if (ok) hit++; return ok ? '🟩' : '🟥'; }).join('');
+  return `${dots} <b>${hit}/${v.length}</b>`;
+}
 const FASE: Record<string, string> = { abertura: 'antes da escalação', escalacao: 'com escalação oficial' };
 
 /* lista agrupada por jogo (é como se navega na casa): jogo → jogador · mercado → linha, odd, casa, chance e EV */
@@ -40,7 +46,8 @@ export function fmtEntries(list: any[]) {
       i++; regs.push({ text: `📝 ${i}`, callback_data: `bet:${x.pid}|${x.mk}|${x.line}:e.${x.strategy_id}`.slice(0, 64) });
       const who = x.pid.startsWith('j') ? 'Jogo' : x.pid.startsWith('t') ? esc(x.team) : esc(x.name);
       const evs = x.edge == null ? '' : ` · EV <b>${pct(+x.edge)}</b>${+x.edge >= .1 ? ' 🔥' : ''}`;
-      return `<b>${i}. ${who}</b> · ${MKN[x.mk] ?? x.mk}\n⬆️ Mais de <b>${n1(+x.line)}</b> · @${n2(+x.odd)} ${esc(x.odd_src ?? '')} · ${Math.round(+x.p * 100)}%${evs}`;
+      const sq = x.sq?.length && !x.pid.startsWith('j') ? '\n' + sqLine(x.sq, +x.line) : '';
+      return `<b>${i}. ${who}</b> · ${MKN[x.mk] ?? x.mk}\n⬆️ Mais de <b>${n1(+x.line)}</b> · @${n2(+x.odd)} ${esc(x.odd_src ?? '')} · ${Math.round(+x.p * 100)}%${evs}${sq}`;
     }).join('\n') + '</blockquote>';
   });
   return { blocks, regs, n: i };
@@ -60,7 +67,7 @@ async function alert(fresh: any[], evMin: number) {
   if (!fresh.length) return 0;
   const { blocks, regs, n } = fmtEntries(fresh);
   const fases = [...new Set(fresh.map(x => FASE[x.fase] ?? ''))].filter(Boolean).join(' / ');
-  let text = `🚨 <b>${n > 1 ? 'NOVAS ENTRADAS' : 'NOVA ENTRADA'} · MODELO BH ⚽</b>\n<i>Melhor odd entre as casas agora · EV mínimo ${Math.round(evMin * 100)}% · 1u cada${fases ? ' · ' + fases : ''}</i>\n\n${blocks.join('\n\n')}\n\n📝 <i>Toque no número para registrar a sua aposta. A linha costuma andar até o jogo.</i>\n${FOOT}`;
+  let text = `🚨 <b>${n > 1 ? 'NOVAS ENTRADAS' : 'NOVA ENTRADA'} · MODELO BH ⚽</b>\n<i>Melhor odd entre as casas agora · EV mínimo ${Math.round(evMin * 100)}% · 1u cada${fases ? ' · ' + fases : ''}</i>\n\n${blocks.join('\n\n')}\n\n🟩 bateu · 🟥 não bateu nos últimos 10 como titular (mais recente primeiro)\n📝 <i>Toque no número para registrar a sua aposta. Quanto antes, melhor: a linha costuma andar até o jogo.</i>\n${FOOT}`;
   if (text.length > 4090) text = text.slice(0, 4000).replace(/<[^>]*$/, '') + '</blockquote>…';
   const kb = { inline_keyboard: [...Array.from({ length: Math.ceil(regs.length / 5) }, (_, k) => regs.slice(k * 5, k * 5 + 5)), [{ text: '🧪 Placar', callback_data: '/estrategias' }, { text: '💼 Banca', callback_data: '/banca' }]] };
   return send(text, kb);

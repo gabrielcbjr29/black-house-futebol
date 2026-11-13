@@ -83,7 +83,7 @@ export function demoSlate({ now = new Date() } = {}) {
   g0.lineup = Object.fromEntries([g0.home.id, g0.away.id].map(t => [t, { xi: sq(t).slice(0, 11), bench: sq(t).slice(11), f: '4-3-3' }]));
   for (const g of games) g.fase = g.lineup ? 'escalacao' : 'abertura';
   const prof = buildProfiles(H), model = buildModel(games, H, prof, {});
-  const slate = { date: dayBR(now), gen: now.toISOString(), demo: true, games, injuries: {}, model, hist: H.fixtures.length };
+  const slate = { date: dayBR(now), gen: now.toISOString(), demo: true, games, injuries: {}, inj: [{ g: games[1].id, n: 'J3.16 F', t: games[1].home.name, st: 'out', why: 'Lesão muscular' }, { g: games[2].id, n: 'J6.12 D', t: games[2].away.name, st: 'doubt', why: 'Dores no tornozelo' }], model, hist: H.fixtures.length };
   // casa fictícia com algumas linhas (odds com margem de ~7% sobre a chance "justa" ± ruído)
   const r = rng(3), lines = new Map();
   for (const [pid, P] of Object.entries(model.players)) for (const mk of ['SH', 'SOT', 'FC', 'FS', 'TK']) {

@@ -27,6 +27,10 @@ export function parseLineups(resp) {
   for (const t of resp || []) if (t.team?.id && t.startXI?.length) out[t.team.id] = { xi: t.startXI.map(x => x.player.id), bench: (t.substitutes || []).map(x => x.player.id), f: t.formation || '' };
   return Object.keys(out).length === 2 ? out : null;
 }
+// lista para o bot (/desfalques): nome, time, situação e motivo
+export function injuryList(resp) {
+  return (resp || []).filter(x => x.fixture?.id && x.player?.id).map(x => ({ g: x.fixture.id, n: x.player.name, t: x.team?.name ?? '', st: /missing/i.test(x.player.type || '') ? 'out' : 'doubt', why: x.player.reason || '' }));
+}
 export function parseInjuries(resp) {
   const out = {};
   for (const x of resp || []) {
@@ -41,8 +45,8 @@ async function main() {
   const api = client();
   const games = parseGames(await api.fixturesByDate(date));
   console.log(`${date}: ${games.length} jogos nas ligas do projeto`);
-  let injuries = {};
-  try { injuries = parseInjuries(await api.injuriesByDate(date)); } catch (e) { console.log('desfalques: falhou (' + e.message + ')'); }
+  let injuries = {}, inj = [];
+  try { const raw = await api.injuriesByDate(date); injuries = parseInjuries(raw); inj = injuryList(raw); } catch (e) { console.log('desfalques: falhou (' + e.message + ')'); }
   // escalações oficiais: só dos jogos que começam em até 80 min (saem cerca de 60 min antes)
   const soon = games.filter(g => !DONE.has(g.status) && Date.parse(g.utc) - now <= LINEUP_WINDOW && Date.parse(g.utc) - now > -150 * 6e4);
   await pool(soon, 4, async g => { try { g.lineup = parseLineups(await api.lineups(g.id)); } catch (e) { console.log(`escalação ${g.id}: ${e.message}`); } });
@@ -54,7 +58,7 @@ async function main() {
   const prof = buildProfiles(H);
   const open = games.filter(g => !DONE.has(g.status));
   const model = buildModel(open, H, prof, injuries);
-  const slate = { date, gen: new Date().toISOString(), games, injuries, model, api: { used: api.st.used, remaining: api.st.remaining }, hist: H.fixtures.length };
+  const slate = { date, gen: new Date().toISOString(), games, injuries, inj, model, api: { used: api.st.used, remaining: api.st.remaining }, hist: H.fixtures.length };
   mkdirSync(OUT, { recursive: true });
   writeFileSync(new URL('slate.json', OUT), JSON.stringify(slate));
   writeFileSync(new URL('results.json', OUT), JSON.stringify(buildResults(H)));
