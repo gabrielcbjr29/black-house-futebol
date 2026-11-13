@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Black House Futebol</title>
+<meta name="description" content="Props de futebol com modelo próprio: chutes, chutes ao gol, faltas, desarmes, defesas e mercados de time. Só MAIS, melhor odd entre as casas, valor esperado e teste em papel.">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark light">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="BH Futebol">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preload" href="fonts/archivo.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="#entradas" aria-label="Início">
+      <img src="icon.svg" width="34" height="34" alt="">
+      <div><b>Black House</b><small>props futebol</small></div>
+    </a>
+    <nav class="tabs" aria-label="Seções">
+      <a href="#entradas">Entradas</a><a href="#jogos">Jogos</a><a href="#estrategias">Estratégias</a><a href="#guia">Guia</a>
+    </nav>
+    <span class="pill" id="dataPill">Carregando…</span>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="v-entradas" class="view">
+    <div class="filters">
+      <input id="q" type="search" placeholder="Buscar jogador ou time" autocomplete="off" aria-label="Buscar jogador ou time">
+      <select id="fLg" aria-label="Liga"><option value="">Todas as ligas</option></select>
+      <select id="fMk" aria-label="Mercado"><option value="">Todos os mercados</option></select>
+      <select id="fGame" aria-label="Jogo"><option value="">Todos os jogos</option></select>
+      <label class="chk"><input type="checkbox" id="fOdd"> Só com odd de casa</label>
+      <label class="chk"><input type="checkbox" id="fOne" checked> 1 por jogador</label>
+    </div>
+    <p class="hint" id="countHint"></p>
+    <div id="list" class="list" aria-live="polite"></div>
+  </section>
+
+  <section id="v-jogos" class="view" hidden><div id="games" class="games"></div></section>
+
+  <section id="v-estrategias" class="view" hidden>
+    <h2>Placar das estratégias <small>(papel, 1u por entrada)</small></h2>
+    <div id="stats" class="tablewrap"><p class="hint">Carregando…</p></div>
+    <h2>Entradas de hoje</h2>
+    <div id="picks" class="tablewrap"></div>
+  </section>
+
+  <section id="v-guia" class="view" hidden>
+    <div class="guide">
+      <h2>Como funciona</h2>
+      <p><b>Modelo BH.</b> Para cada jogador: taxa por 90 minutos de cada estatística (peso maior nos jogos recentes, puxada para a média da posição quando há poucos jogos) × minutos esperados × contexto do jogo (quanto o adversário cede, mando, árbitro). Para os times: média da liga × força do time × o que o adversário cede × mando. A contagem segue uma binomial negativa; a chance mostrada é de <b>MAIS</b> que a linha.</p>
+      <p><b>Duas fases.</b> Antes da escalação, o modelo usa a titularidade provável (histórico recente) e a chance já desconta o risco de ele começar no banco. Quando a escalação oficial sai (cerca de 60 min antes), titular ou banco passam a valer e o monitor de risco avisa no bot se uma entrada enviada perdeu o titular.</p>
+      <p><b>Anulação.</b> A chance é condicionada a o jogador entrar em campo, porque sem entrar a aposta costuma ser anulada. Confira a regra da casa onde você aposta.</p>
+      <p><b>1º tempo.</b> A API não traz chutes de jogador por tempo: o modelo usa a fatia de chutes do 1º tempo da liga, e essas entradas são conferidas à mão.</p>
+      <p><b>Valor esperado (EV)</b> = chance × odd − 1, na melhor odd entre as casas lidas. Sem casa, aparece a odd justa (1 ÷ chance) da linha de referência do modelo, só para comparar.</p>
+      <p><b>Nota BH</b> (0–100) junta chance, EV, acertos recentes na mesma linha, contexto do jogo e certeza de que ele joga.</p>
+      <p><b>Fábrica de estratégias.</b> Uma estratégia por mercado, todas em papel: 1u na linha e odd do alerta, fechamento para medir o CLV. Uma estratégia só sai do papel com 50+ entradas, ROI e CLV positivos.</p>
+      <h2>Casas lidas agora</h2>
+      <div id="houses"></div>
+      <h2>Validação do modelo</h2>
+      <div id="calib"><p class="hint">A validação aparece quando houver histórico real suficiente.</p></div>
+      <p class="foot">🔞 18+ · Apostas podem causar dependência. Jogue com responsabilidade.</p>
+    </div>
+  </section>
+</main>
+
+<dialog id="dlg"><div id="dlgBody"></div><form method="dialog"><button class="btn">Fechar</button></form></dialog>
+<footer class="wrap foot">🔞 18+ · Conteúdo informativo. Apostas podem causar dependência; jogue com responsabilidade.</footer>
+<script type="module" src="app.js"></script>
+</body>
+</html>

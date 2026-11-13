@@ -1,0 +1,16 @@
+{
+  "name": "black-house-futebol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Black House Futebol: props de jogadores e de times com modelo próprio, teste em papel, CLV e alertas no Telegram",
+  "scripts": {
+    "historico": "node collector/history.js",
+    "update": "node collector/build.js",
+    "demo": "node collector/demo.js",
+    "serve": "node scripts/serve.js",
+    "calibrar": "node collector/calibrate.js",
+    "test": "node --test --test-concurrency=1"
+  },
+  "engines": { "node": ">=20" }
+}
