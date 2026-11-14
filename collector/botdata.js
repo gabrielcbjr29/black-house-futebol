@@ -134,7 +134,7 @@ export function buildBotData(slate, lines = new Map(), { houses = [] } = {}) {
   return {
     date: slate.date, gen: slate.gen,
     games: slate.games.map(g => ({ id: g.id, lg: g.lg, utc: g.utc, st: g.status, h: g.home.name, a: g.away.name, hid: g.home.id, aid: g.away.id, fase: g.fase, ref: g.ref || null })),
-    injuries: slate.injuries, inj: slate.inj ?? [], refs: slate.refs ?? {}, houses, rows, rowsU, mdl,
+    injuries: slate.injuries, inj: slate.inj ?? [], refs: slate.refs ?? {}, houses, rows, rowsU, mdl, kits: slate.kits ?? { kit: {}, num: {} },
     // Caçador: últimos 20 jogos de cada jogador do dia [min, titular, casa, liga, chutes, no gol, f.com., f.sofr., desarmes, defesas]
     hunt: { date: slate.date, gen: slate.gen, p: Object.fromEntries(Object.entries(slate.model.players).filter(([, P]) => P.hx?.length).map(([pid, P]) => [pid, P.hx.map(h => h.slice(0, 10))])) },
     ks: Object.fromEntries(Object.entries(MARKETS).map(([k, v]) => [k, v.k])),

@@ -1,6 +1,7 @@
 // Black House Futebol · app (PWA estático no GitHub Pages). Lê public/data/*.json gerados pela coleta.
 import { MARKETS, playerOver, nbOver, ev } from './engine.js';
 import { PRESETS, DEFAULT, HUNT_MK, preset, run as huntRun } from './hunter.js';
+import { avatarSVG } from './avatar.js';
 
 const FN = 'https://mccxlgtiulpknubdiyrz.supabase.co/functions/v1/';
 const LG = { 39: ['🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Premier League'], 140: ['🇪🇸', 'La Liga'], 135: ['🇮🇹', 'Serie A'], 78: ['🇩🇪', 'Bundesliga'], 61: ['🇫🇷', 'Ligue 1'], 71: ['🇧🇷', 'Brasileirão'], 2: ['🏆', 'Champions'] };
@@ -32,7 +33,7 @@ function card(r, i) {
   const odd = r.d ? `<span class="odd">@${n2(r.d)} <small>${esc(r.b)}${r.of?.length > 1 ? ` +${r.of.length - 1}` : ''}</small>${stale}</span>` : `<span class="odd"><small>justa</small> @${n2(1 / r.p)}</span>`;
   const g = r.gr === 'A+' ? 'ap' : r.gr === 'A' ? 'a' : '';
   return `<button class="card" data-i="${i}">
-    <div class="who"><b>${who}</b><span class="grade ${g}">${r.gr} · ${r.nt}</span></div>
+    <div class="who"><span class="kit">${avatarSVG(r, D, 30)}</span><b>${who}</b><span class="grade ${g}">${r.gr} · ${r.nt}</span></div>
     <div class="meta">${LG[r.lg]?.[0] ?? ''} ${r.k === 'p' ? esc(r.t) + ' x ' + esc(r.o) : r.k === 't' ? 'x ' + esc(r.o) : 'jogo'} · ${hour(r.utc)}${st ? ` · <span class="chip ${st[0]}">${st[1]}${r.st === 'provavel' ? ' ' + pc(r.ps) : ''}</span>` : ''}${r.fase === 'escalacao' ? ' · escalação ✓' : ''}</div>
     <div class="bet"><span class="ln">MAIS DE ${n1(r.l)} <small>${esc(MARKETS[r.m].lb.toLowerCase())}</small></span>${odd}</div>
     <div class="nums"><span>Chance <b>${pc(r.p)}</b></span>${r.e != null ? `<span>EV <b class="${r.e >= 0 ? 'pos' : 'neg'}">${pct(r.e)}</b></span>` : ''}<span>Projeção <b>${n1(Math.round(r.pj * 10) / 10)}</b></span>${r.hit ? `<span>${r.hit[0]}/${r.hit[1]} na linha</span>` : ''}${r.sk >= 3 ? `<span class="chip hot">🔥 ${r.sk} seguidos</span>` : ''}</div>
@@ -144,7 +145,7 @@ async function renderHunt() {
   const P = PRESETS[HP];
   $('#hHint').textContent = `${HVIEW.length} jogador${HVIEW.length === 1 ? '' : 'es'} · mais de ${n1(HF.l)} ${MARKETS[HF.mk].lb.toLowerCase()} em ${HF.pct}%+ dos últimos ${HF.w}${HF.tit ? ` como titular (${HF.mmin}+ min)` : ''}${P ? ' · ' + P.why : ''}`;
   $('#hList').innerHTML = HVIEW.map((x, i) => `<button class="card" data-i="${i}">
-    <div class="who"><b>${esc(x.m.n)}</b><span class="grade ${x.e != null && x.e >= .05 ? 'ap' : x.p >= .6 ? 'a' : ''}">${x.hit}/${x.n}</span></div>
+    <div class="who"><span class="kit">${avatarSVG({ k: 'p', id: x.pid, n: x.m.n, t: x.m.tn, pos: x.m.pos }, D, 30)}</span><b>${esc(x.m.n)}</b><span class="grade ${x.e != null && x.e >= .05 ? 'ap' : x.p >= .6 ? 'a' : ''}">${x.hit}/${x.n}</span></div>
     <div class="meta">${LG[x.m.lg]?.[0] ?? ''} ${esc(x.m.tn)} · ${POS1[x.m.pos] ?? x.m.pos} · ${x.m.home ? 'x' : '@'} ${esc(x.m.on)} · ${hour(x.m.utc)}${x.m.st === 'xi' ? ' · <span class="chip xi">titular</span>' : ` · <span class="chip">provável ${pc(x.m.ps)}</span>`}</div>
     <div class="bet"><span class="ln">MAIS DE ${n1(HF.l)} <small>${esc(MARKETS[HF.mk].lb.toLowerCase())}</small></span>${x.house ? `<span class="odd">@${n2(x.odd)} <small>${esc(x.house)}</small></span>` : `<span class="odd"><small>justa</small> @${n2(x.odd)}</span>`}</div>
     <div class="nums"><span>Modelo <b>${pc(x.p)}</b>${x.hit / x.n - x.p >= .2 ? ' ⚠️' : ''}</span>${x.e != null ? `<span>EV <b class="${x.e >= 0 ? 'pos' : 'neg'}">${pct(x.e)}</b></span>` : ''}<span>Histórico <b>${pc(x.hit / x.n)}</b></span>${x.sk >= 3 ? `<span class="chip hot">🔥 ${x.sk} seguidos</span>` : ''}</div>

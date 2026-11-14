@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { avatarSVG } from '../public/avatar.js';
 
 const ROOT = process.argv[2] || join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const MK = { SH: 'chutes', SOT: 'chutes ao gol', SH1: 'chutes no 1º tempo', SOT1: 'chutes ao gol no 1º tempo', FC: 'faltas cometidas', FS: 'faltas sofridas', TK: 'desarmes', SV: 'defesas' };
@@ -17,6 +18,7 @@ const pct = x => Math.round(x * 100) + '%';
 const hit = h => h?.[1] ? `${h[0]}/${h[1]}` : '–';
 const font = f => readFileSync(join(ROOT, 'fonts', f)).toString('base64');
 const hourBR = iso => new Date(iso).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+let BOT = null; // bot.json do dia (cores das camisas e números)
 export const cardKey = r => `${r.id}-${r.m}-${String(r.l).replace('.', '_')}${r.s === 'u' ? '-u' : ''}`;
 // escudo genérico: iniciais do time sobre uma cor derivada do nome (sem escudos oficiais)
 const initials = t => { const w = String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z ]/g, ' ').split(/\s+/).filter(x => x.length > 2 && !/^(FC|CF|AFC|SC|AC|SSC|Club|Real|Clube)$/i.test(x)); return (w.length >= 2 ? w[0][0] + w[1][0] + (w[2]?.[0] ?? '') : (w[0] ?? t).slice(0, 3)).toUpperCase(); };
@@ -78,6 +80,8 @@ body { width: 1080px; height: 1350px; background: #000; color: #F2F5F2; font-fam
 .why div.n::before { content: '!'; background: rgba(255,201,51,.16); color: #FFC933; }
 .foot { margin-top: auto; padding-top: 20px; display: flex; justify-content: space-between; font-size: 18px; color: #6F7C73; font-weight: 600; }
 .badge { background: linear-gradient(160deg, hsl(var(--h) 55% 38%), hsl(var(--h) 60% 18%)); }
+.badge.kit { background: rgba(255,255,255,.06); box-shadow: inset 0 0 0 2px rgba(255,255,255,.12); }
+.badge.kit svg { display: block; }
 .note { margin-top: 10px; font-size: 17px; font-weight: 700; color: #6F7C73; text-align: right; }
 .c .bars { height: 172px; margin-top: 40px; }
 .c .sub + .sub { margin-top: 4px; font-size: 23px; }
@@ -117,7 +121,7 @@ export function cardHTML(r, date) {
     <div class="note">mais antigo → mais recente</div></div>`;
   return `<div class="c">
   <div class="top"><div class="brand">BLACK <b>HOUSE</b><small>PROPS FUTEBOL · ${dd}/${mm}</small></div><div class="pill">ENTRADA DO DIA</div></div>
-  <div class="who"><div class="badge" style="--h:${hue(r.t)}">${esc(initials(r.t))}</div>
+  <div class="who"><div class="badge kit">${avatarSVG(r, BOT, 132)}</div>
     <div><div class="name">${esc(r.n)}</div><div class="sub">${esc(POS[r.pos] || '')}${r.pos ? ' · ' : ''}${esc(r.t)}</div><div class="sub">${esc(vs)} · ${hourBR(r.utc)} · ${esc(LG[r.lg] || '')}</div>${st ? `<div class="sub">${st}</div>` : ''}</div>
     <div class="grade"><div class="g g${r.gr === 'A+' ? 'Ap' : r.gr}">${esc(r.gr)}</div><small>NOTA ${r.nt ?? '–'}</small></div></div>
   <div class="line"><span class="side ${r.s === 'u' ? 'u">MENOS DE' : 'o">MAIS DE'}</span><span class="ln">${n1(r.l)}</span><span class="mk">${esc(MK[r.m] || r.m)}</span></div>
@@ -133,7 +137,7 @@ export function cardHTML(r, date) {
 }
 
 export async function renderCards(root = ROOT) {
-  const bot = JSON.parse(readFileSync(join(root, 'data', 'bot.json'), 'utf8'));
+  const bot = JSON.parse(readFileSync(join(root, 'data', 'bot.json'), 'utf8')); BOT = bot;
   // as melhores do dia (cd=1) e toda entrada de estratégia (o alerta manda a imagem no topo)
   let picks = [];
   try { picks = JSON.parse(readFileSync(join(root, 'data', 'strategies.json'), 'utf8')).picks ?? []; } catch { /* sem estratégias */ }

@@ -36,6 +36,7 @@ export function client({ key = process.env.APIFOOTBALL_KEY, max = +(process.env.
     fixturePlayers: fixture => get('fixtures/players', { fixture }),
     fixtureStats: (fixture, half = true) => get('fixtures/statistics', { fixture, half: half ? 'true' : undefined }),
     lineups: fixture => get('fixtures/lineups', { fixture }),
+    squad: team => get('players/squads', { team }),
     injuriesByDate: (date, tz = 'America/Sao_Paulo') => get('injuries', { date, timezone: tz }),
     injuriesByFixture: fixture => get('injuries', { fixture }),
   };

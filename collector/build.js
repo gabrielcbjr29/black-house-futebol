@@ -8,6 +8,7 @@ import { client } from './apifootball.js';
 import { pool } from './http.js';
 import { loadHistory } from './history.js';
 import { buildModel, buildProfiles, refKey } from './model.js';
+import { loadKits, saveKits, colorsFromLineups, updateKits, kitsForBot } from './kits.js';
 import { finishBot } from './bot.js';
 import { buildResults } from './results.js';
 
@@ -49,7 +50,9 @@ async function main() {
   try { const raw = await api.injuriesByDate(date); injuries = parseInjuries(raw); inj = injuryList(raw); } catch (e) { console.log('desfalques: falhou (' + e.message + ')'); }
   // escalações oficiais: só dos jogos que começam em até 80 min (saem cerca de 60 min antes)
   const soon = games.filter(g => !DONE.has(g.status) && Date.parse(g.utc) - now <= LINEUP_WINDOW && Date.parse(g.utc) - now > -150 * 6e4);
-  await pool(soon, 4, async g => { try { g.lineup = parseLineups(await api.lineups(g.id)); } catch (e) { console.log(`escalação ${g.id}: ${e.message}`); } });
+  const K0 = loadKits();
+  await pool(soon, 4, async g => { try { const raw = await api.lineups(g.id); g.lineup = parseLineups(raw); colorsFromLineups(raw, K0); } catch (e) { console.log(`escalação ${g.id}: ${e.message}`); } });
+  saveKits(K0);
   for (const g of games) g.fase = g.lineup ? 'escalacao' : 'abertura';
   // dispersão (k) calibrada com o histórico real (npm run calibrar), quando há amostra suficiente
   const cf = new URL('calib.json', OUT);
@@ -60,7 +63,11 @@ async function main() {
   const model = buildModel(open, H, prof, injuries);
   // árbitros de hoje: faltas e cartões por jogo no histórico
   const refs = Object.fromEntries(open.filter(g => g.ref).map(g => [g.ref, prof.RF[refKey(g.ref)] ?? null]));
-  const slate = { date, gen: new Date().toISOString(), games, injuries, inj, model, refs, api: { used: api.st.used, remaining: api.st.remaining }, hist: H.fixtures.length };
+  // camisas: cores do time e número da camisa (avatar sem foto), preenchidas aos poucos
+  let kits = { kit: {}, num: {} };
+  try { const { K, used } = await updateKits(api, open, H, { max: Math.min(40, Math.max(0, (api.st.remaining ?? 1000) - 300)) }); kits = kitsForBot(K, { games: open, model }); if (used) console.log(`camisas: ${used} pedidos · ${Object.keys(kits.kit).length} times com cor · ${Object.keys(kits.num).length} números`); }
+  catch (e) { console.log('camisas: ' + e.message); }
+  const slate = { date, gen: new Date().toISOString(), games, injuries, inj, model, refs, kits, api: { used: api.st.used, remaining: api.st.remaining }, hist: H.fixtures.length };
   mkdirSync(OUT, { recursive: true });
   writeFileSync(new URL('slate.json', OUT), JSON.stringify(slate));
   writeFileSync(new URL('results.json', OUT), JSON.stringify(buildResults(H)));

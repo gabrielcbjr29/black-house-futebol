@@ -108,3 +108,6 @@ dialog::backdrop { background: rgba(0,0,0,.7); }
 .seg { grid-column: 1 / -1; }
 .hunt .seg label { flex-direction: row; gap: 6px; font-size: 14px; font-weight: 500; color: var(--ink-2); }
 .odd .stale { color: var(--warn); font-weight: 700; }
+.who .kit { flex: none; display: inline-flex; margin-right: 8px; }
+.who .kit svg { display: block; }
+.card .who { align-items: center; } .card .who b { flex: 1; }

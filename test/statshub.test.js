@@ -77,3 +77,20 @@ test('PDF do dia: múltiplas uma perna por jogo, combinados no mesmo jogo, maior
   const html = pdfHTML({ date: '2026-11-14', gen: new Date().toISOString(), games: [{}], rows, rowsU: [], houses: [{ house: 'Farra', at: new Date(Date.now() - 3 * 3600e3).toISOString(), n: 10 }] }, null);
   assert.ok(html.includes('Leitura das odds com 2 h ou mais'));
 });
+import { avatarSVG, kitOf } from '../public/avatar.js';
+import { colorsFromLineups, kitsForBot } from '../collector/kits.js';
+test('camisa: cores do clube, número da camisa, goleiro com uniforme próprio e contraste garantido', () => {
+  const K = {};
+  colorsFromLineups([{ team: { id: 40, name: 'Liverpool', colors: { player: { primary: 'c8102e', number: 'ffffff', border: 'f6eb61' }, goalkeeper: { primary: '1d9a48', number: '000000' } } },
+    startXI: [{ player: { id: 6716, number: 10 } }], substitutes: [{ player: { id: 99, number: 30 } }] }], K);
+  assert.equal(K[40].kit.p, '#c8102e'); assert.equal(K[40].num[6716], 10);
+  const bot = kitsForBot(K, { games: [{ home: { id: 40, name: 'Liverpool' }, away: { id: 1, name: 'X' } }], model: { players: { 6716: { t: 40 } } } });
+  const svg = avatarSVG({ k: 'p', id: '6716', n: 'Alexis Mac Allister', t: 'Liverpool', pos: 'M' }, { kits: bot }, 48);
+  assert.ok(svg.includes('#c8102e') && svg.includes('>10<') && svg.includes('>AM<'));
+  assert.equal(kitOf({ k: 'p', t: 'Liverpool', pos: 'G' }, { kits: bot }).p, '#1d9a48');
+  // sem cor conhecida: tom pelo nome e número legível
+  const k = kitOf({ k: 't', n: 'Time Sem Cor', t: 'Time Sem Cor' }, {});
+  assert.match(k.p, /^#[0-9a-f]{6}$/); assert.ok(['#ffffff', '#111111'].includes(k.n));
+  // número que some na camisa (mesma cor) é trocado por branco ou preto
+  assert.ok(['#ffffff', '#111111'].includes(kitOf({ k: 'p', t: 'A' }, { kits: { kit: { A: { p: '#ffffff', n: '#fefefe' } } } }).n));
+});
