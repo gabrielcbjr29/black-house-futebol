@@ -36,15 +36,15 @@ async function sb(path: string, init: RequestInit = {}) {
 const TG = async (m: string, body: unknown) => { const c = await cfg(); return fetch(`https://api.telegram.org/bot${c.token}/${m}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()); };
 
 type Row = { id: string; n: string; t: string; o: string; home: boolean; g: number; lg: number; utc: string; fase: string; k: 'p' | 't' | 'j'; pos?: string; ps?: number; st?: string; ms?: number;
-  m: string; s: 'o'; l: number; p: number; d: number | null; b: string | null; of?: [string, number][]; e: number | null; pj: number; ps1?: number; sq?: number[]; jh?: number[]; ja?: number[];
-  hit: [number, number] | null; h5: [number, number] | null; sk?: number; cx?: number; nt: number; gr: string; ref?: 1; cd?: 1;
+  m: string; s: 'o' | 'u'; l: number; p: number; d: number | null; b: string | null; of?: [string, number][]; e: number | null; pj: number; ps1?: number; sq?: number[]; jh?: number[]; ja?: number[];
+  hit: [number, number] | null; h5: [number, number] | null; sk?: number; cx?: number; nt: number; gr: string; ref?: 1; cd?: 1; td?: any;
   ex?: { p90?: number | null; sa?: number | null; ns?: number; hm?: number | null; nh?: number; aw?: number | null; na?: number; oa?: number | null; op?: number | null } };
 type MPlayer = { n: string; t: number; tn: string; on: string; home: boolean; g: number; lg?: number; gap?: number; utc: string; pos: string; ps: number; pb: number; st: string; ms: number; mu: Record<string, [number, number]>; sq: Record<string, number[]> };
 type Game = { id: number; lg: number; utc: string; st: string; h: string; a: string; hid: number; aid: number; fase: string; ref: string | null };
 type Data = { date: string; gen: string; demo?: boolean; games: Game[]; rows: Row[]; inj: { g: number; n: string; t: string; st: string; why: string }[];
   mdl: { p: Record<string, MPlayer>; t: Record<string, { h: number; a: number; hn: string; an: string; pj: { h: Record<string, number>; a: Record<string, number> }; ref: string | null; rf: number }> };
   ks: Record<string, number>; houses: { house: string; at: string; n: number }[];
-  refs?: Record<string, { n: number; f: number; fpg: number; lfpg: number; cpg: number; lg: number } | null> };
+  refs?: Record<string, { n: number; f: number; fpg: number; lfpg: number; cpg: number; lg: number } | null>; rowsU?: Row[] };
 type Hunt = { date: string; gen: string; p: Record<string, number[][]> };
 
 let CACHE: { at: number; data: Data } | null = null;
@@ -101,7 +101,8 @@ const ODD_MIN = 1.4, ODD_MAX = 3.5;
 const oddOf = (r: Row) => r.d ?? (r.p > 0 ? 1 / r.p : 99);
 const inRange = (r: Row) => { const o = oddOf(r); return o >= ODD_MIN - 1e-9 && o <= ODD_MAX + 1e-9; };
 const RANGE_TXT = ' · odds 1,40–3,50';
-const keyOf = (r: Row) => `${r.id}|${r.m}|${r.l}`;
+const keyOf = (r: Row) => `${r.id}|${r.m}|${r.l}${r.s === 'u' ? '|u' : ''}`;
+const sideTx = (s?: string) => s === 'u' ? '⬇️ Menos' : '⬆️ Mais';
 const cardUrl = (d: Data, r: Row) => `${APP_URL}data/cards/${encodeURIComponent(`${r.id}-${r.m}-${String(r.l).replace('.', '_')}`)}.jpg?v=${encodeURIComponent(d.gen)}`;
 const hitTxt = (h?: [number, number] | null) => h?.[1] ? `<b>${h[0]}/${h[1]}</b>` : '–';
 const u2 = (x: number) => (x >= 0 ? '+' : '') + x.toFixed(2).replace('.', ',') + 'u';
@@ -442,7 +443,7 @@ async function pushDaily(force = false, lead = 0) {
 }
 
 // ---------- entradas das estratégias ----------
-const estKey = (x: any) => `${x.pid}|${x.mk}|${+(x.open_line ?? x.line)}`;
+const estKey = (x: any) => `${x.pid}|${x.mk}|${+(x.open_line ?? x.line)}${x.side === 'u' ? '|u' : ''}`;
 async function estEntries(date: string) {
   const picks = await sb(`strategy_picks?date=eq.${date}&status=eq.aberta&alerted=eq.true&select=strategy_id,pid,name,team,opp,gid,mk,line,odd,open_line,open_odd,odd_src,p,edge,tip_utc,sq&order=edge.desc.nullslast`).catch(() => []);
   if (!picks?.length) return null;
@@ -483,10 +484,10 @@ const ODD_KB = (id: number) => ({ inline_keyboard: [
   [BTN('❌ Cancelar', `bx:${id}`)]] });
 async function betStart(chatId: number, d: Data, r: Row, src: string): Promise<Out> {
   await sb(`bets?chat_id=eq.${chatId}&status=eq.aguardando_odd`, { method: 'DELETE' }).catch(() => null);
-  const row = (await sb('bets', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ chat_id: chatId, date: d.date, pid: r.id, name: r.n, team: r.t, opp: r.o, gid: r.g, mk: r.m, line: r.l, ref_line: r.l, side: 'o', p_model: r.p, nota: r.nt ?? null, src, house: r.b ?? null, status: 'aguardando_odd' }) }))?.[0];
+  const row = (await sb('bets', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ chat_id: chatId, date: d.date, pid: r.id, name: r.n, team: r.t, opp: r.o, gid: r.g, mk: r.m, line: r.l, ref_line: r.l, side: r.s ?? 'o', p_model: r.p, nota: r.nt ?? null, src, house: r.b ?? null, status: 'aguardando_odd' }) }))?.[0];
   return { text: `<b>📝 REGISTRAR ENTRADA · 1u</b>
 <blockquote>${whoB(r)} <i>${esc(vsTxt(r))} · ${hourBR(r.utc)}</i>
-⬆️ Mais de <b>${n1(r.l)}</b> ${MK[r.m] ?? r.m} · modelo ${pc(r.p)}${r.nt != null ? ` · nota ${r.nt}` : ''}${r.d ? ` · melhor odd ${n2(r.d)} ${esc(r.b ?? '')}` : ''}</blockquote>
+${sideTx(r.s)} de <b>${n1(r.l)}</b> ${MK[r.m] ?? r.m} · modelo ${pc(r.p)}${r.nt != null ? ` · nota ${r.nt}` : ''}${r.d ? ` · melhor odd ${n2(r.d)} ${esc(r.b ?? '')}` : ''}</blockquote>
 <b>Qual odd você pegou?</b> Toque abaixo ou <b>responda com a odd</b>, por exemplo <code>1,83</code>.
 Se a linha da sua casa for outra, mande odd e linha: <code>1,83 ${n1(r.l + 1)}</code>
 Para outra stake, some as unidades: <code>1,83 2u</code>`, kb: ODD_KB(row.id), force: true };
@@ -520,7 +521,7 @@ async function betFinish(chatId: number, id: number | null, text: string): Promi
   const line = (patch.line as number) ?? +b.line, p = (patch.p_model as number) ?? +b.p_model, st = (patch.stake as number) ?? +b.stake;
   const ev = p ? p * v.odd - 1 : null;
   return { text: `✅ <b>Entrada #${b.id} registrada</b>
-<blockquote><b>${esc(b.name)}</b> · mais de ${n1(line)} ${MK[b.mk] ?? b.mk}
+<blockquote><b>${esc(b.name)}</b> · ${b.side === 'u' ? 'menos' : 'mais'} de ${n1(line)} ${MK[b.mk] ?? b.mk}
 Odd <b>${n2(v.odd)}</b> · ${n1(st)}u${p ? ` · modelo ${pc(p)}` : ''}${ev != null ? ` · EV pelo modelo ${pctS(ev)}` : ''}${b.ref_line != null && line !== +b.ref_line ? `\n<i>linha da casa ${n1(line)} (sugestão era ${n1(+b.ref_line)})</i>` : ''}</blockquote>
 ${/1$/.test(b.mk) ? 'Mercado de 1º tempo: confira com <code>/resultado ' + b.id + ' valor</code> depois do jogo.' : 'Confiro sozinho depois do jogo e te conto de manhã.'} Acompanhe em /banca.`, kb: { inline_keyboard: [[BTN('💼 Minha banca', '/banca'), ...(srcCmd(b.src) ? [BTN('◀ Voltar', srcCmd(b.src))] : []), BTN('🏠 Menu', '/menu')]] } };
 }
@@ -533,7 +534,7 @@ async function settleBets(rows: any[]) {
     const a = res.stats[r.date]?.[r.pid]; if (!a) continue;
     let patch: Record<string, unknown>;
     if (!(a[0] > 0)) patch = { status: 'void', profit: 0, result: null };
-    else { const v = a[RIDX[r.mk]], st = v > +r.line ? 'green' : 'red'; patch = { status: st, result: v, profit: st === 'green' ? Math.round(+r.stake * (+r.odd - 1) * 100) / 100 : -+r.stake }; }
+    else { const v = a[RIDX[r.mk]], st = (r.side === 'u' ? v < +r.line : v > +r.line) ? 'green' : 'red'; patch = { status: st, result: v, profit: st === 'green' ? Math.round(+r.stake * (+r.odd - 1) * 100) / 100 : -+r.stake }; }
     patch.settled_at = new Date().toISOString();
     Object.assign(r, patch);
     await sb(`bets?id=eq.${r.id}`, { method: 'PATCH', body: JSON.stringify(patch) }).catch(() => null);
@@ -581,7 +582,7 @@ async function resultadoCmd(chatId: number, rest: string[]): Promise<Out> {
   if (!id || !Number.isFinite(v)) return { text: 'Uso: <code>/resultado 12 2</code> (número da sua entrada e quantos ele fez). Para entrada de estratégia: <code>/resultado e45 1</code>.', kb: { inline_keyboard: [HOME] } };
   if (id.startsWith('e')) {
     const x = (await sb(`strategy_picks?id=eq.${parseInt(id.slice(1), 10)}&select=*`).catch(() => []))?.[0]; if (!x) return { text: 'Entrada não encontrada.', kb: { inline_keyboard: [HOME] } };
-    const L = +(x.open_line ?? x.line), O = +(x.open_odd ?? x.odd), st = v > L ? 'green' : 'red';
+    const L = +(x.open_line ?? x.line), O = +(x.open_odd ?? x.odd), st = (x.side === 'u' ? v < L : v > L) ? 'green' : 'red';
     await sb(`strategy_picks?id=eq.${x.id}`, { method: 'PATCH', body: JSON.stringify({ status: st, result: v, profit: st === 'green' ? Math.round((O - 1) * 100) / 100 : -1, settled_at: new Date().toISOString() }) });
     return { text: `Entrada da estratégia #${x.id} conferida: ${st === 'green' ? '✅ green' : '❌ red'} (${n1(v)} na linha ${n1(L)}).`, kb: { inline_keyboard: [[BTN('🧪 Estratégias', '/estrategias'), BTN('🏠 Menu', '/menu')]] } };
   }
@@ -982,6 +983,35 @@ function arbitrosCmd(d: Data, page = 1): Out {
 ` + FOOT, kb: { inline_keyboard: [...(nav.length ? [nav] : []), [BTN('🧱 Faltas', '/faltas'), BTN('🤕 Sofridas', '/sofridas'), BTN('➕ Totais', '/totais')], home('/arbitros', pg)] } };
 }
 
+// ---------- 📈 Tendência: lista à parte (sequência + confronto + defesa + odd, sem depender do modelo) ----------
+const ORD = (n: number) => n + 'º';
+const hTx = (h: any) => Array.isArray(h?.[0]) ? h.map((x: any) => x ? `${x[0]}/${x[1]}` : '–').join(' e ') : h ? `${h[0]}/${h[1]}` : '–';
+function tdLines(r: Row) {
+  const t = r.td; if (!t) return '';
+  const u = r.s === 'u', st = MSTAT[r.m] ?? { TSH: 'sh', TSOT: 'sot', TFC: 'fc', JSH: 'sh', JSOT: 'sot', JFC: 'fc' }[r.m];
+  const what = r.k === 'p' ? `a ${POSN[r.pos ?? ''] ?? 'jogadores da posição'}` : r.k === 't' ? 'por jogo' : 'de total por jogo';
+  let df = '';
+  if (t.both) { const [a, b] = t.df ?? []; if (a && b) df = `🛡️ Os dois times no total: ${ORD(a[1])} de ${a[2]} e ${ORD(b[1])} de ${b[2]} na liga (${n1(a[0])} e ${n1(b[0])} por jogo)`; }
+  else if (t.df) df = `🛡️ ${esc(r.o)}: ${ORD(t.df[1])} de ${t.df[2]} que mais cede ${what} na liga (${n1(t.df[0])}${r.k === 'p' ? ' por 90' : ' por jogo'})${u ? ' · entre os que MENOS cedem' : ''}`;
+  const vs = t.vs?.[1] ? `${t.vs[0]}/${t.vs[1]} contra o ${esc(r.k === 'j' ? 'mesmo adversário' : r.o)}` : 'sem jogo contra ele no histórico';
+  return `🔢 L10 <b>${hTx(t.l10)}</b> · L5 <b>${hTx(t.l5)}</b> · L20 ${hTx(t.l20)}${t.both ? ' <i>(casa e fora, cada um nos seus jogos)</i>' : ''}\n⚔️ ${vs}\n${df}`;
+}
+async function tendenciaCmd(d: Data): Promise<Out> {
+  const st = await estToday(d.date), now = Date.now();
+  const picks = (st?.picks ?? []).filter((p: any) => p.strategy_id === 'tendencia' && (!p.tip_utc || Date.parse(p.tip_utc) > now - 5 * 6e4));
+  const all = [...d.rows, ...(d.rowsU ?? [])];
+  const items = picks.map((p: any) => all.find(r => r.id === p.pid && r.m === p.mk && r.l === +p.line && (r.s ?? 'o') === (p.side ?? 'o'))).filter(Boolean) as Row[];
+  const intro = `<i>Método à parte, sem depender do modelo: 7+/10 e 4+/5 na linha da casa, 50%+ contra o adversário (ou nenhum jogo), adversário entre os ~35% que mais cedem (mais) ou menos cedem (menos) na liga, odd 1,60–2,30, titular com 70+ min. 1 por jogador, até 10 por dia.</i>`;
+  if (!items.length) return { text: header(d, '📈 TENDÊNCIA') + `\n${intro}\n\nNenhuma entrada passou em todos os critérios ${d.rows.some(r => r.d) ? 'hoje' : '(ainda sem linhas de casa lidas)'}.\n` + FOOT, kb: { inline_keyboard: [[BTN('🧪 Placar', '/estrategias tendencia')], HOME] } };
+  const body = items.map((r, i) => `<b>${i + 1}.</b> ${whoB(r)} <i>${esc(vsTxt(r))} · ${hourBR(r.utc)}</i>
+${sideTx(r.s)} de <b>${n1(r.l)}</b> ${MK[r.m] ?? r.m} · <code>@${n2(r.d!)}</code> ${esc(r.b ?? '')}
+${tdLines(r)}
+📈 <i>sinal da sequência, não do modelo</i> · 🧠 modelo ${pc(r.p)}${r.e != null ? ` (EV ${evS(r.e)})` : ''}`).join('\n\n');
+  const regs = items.map((r, i) => BTN(`📝 ${i + 1}`, `bet:${keyOf(r)}:e.tendencia`));
+  return { text: header(d, '📈 TENDÊNCIA', ` · ${items.length}`) + `\n${intro}\n\n<blockquote>${body}</blockquote>\n<i>A coluna do modelo é só para comparar: a Tendência entra mesmo quando o modelo discorda, e o placar dela é separado.</i>\n` + FOOT,
+    kb: { inline_keyboard: [...chunk(regs, 5), [BTN('🧪 Placar', '/estrategias tendencia')], HOME] } };
+}
+
 const HELP = `<b>📖 COMANDOS</b>
 
 <b>Melhores do dia</b>
@@ -999,6 +1029,7 @@ const HELP = `<b>📖 COMANDOS</b>
 /jogo arsenal · /jogador saka
 /cacador · caçador de props (filtros prontos ou o seu)
 /sequencias · quem vem batendo uma linha há 5+ jogos
+/tendencia · método Tendência (sequência + confronto + defesa + odd)
 /arbitros · árbitros do dia: faltas, cartões e rigor
 
 <b>Rodada</b>
@@ -1037,6 +1068,7 @@ const MENU = { inline_keyboard: [
   [BTN('🗓️ Jogos', '/jogos'), BTN('🚑 Desfalques', '/desfalques'), BTN('📋 Resumo', '/resumo')],
   [BTN('🎯 Top 10 Chutes', '/topchutes'), BTN('🧱 Top 10 Faltas', '/topfaltas')],
   [BTN('🕵️ Caçador', '/cacador'), BTN('🔥 Sequências', '/sequencias'), BTN('🟨 Árbitros', '/arbitros')],
+  [BTN('📈 Tendência', '/tendencia'), BTN('🧪 Placar', '/estrategias')],
   [BTN('🧠 Modelo BH', '/modelo'), BTN('📒 Testes', '/testes'), BTN('📬 Envio diário', '/receber')],
   [BTN('💼 Banca e ROI', '/banca'), BTN('🧪 Estratégias', '/estrategias'), BTN('🖼️ Cards do dia', '/cards')],
   [{ text: '📱 Abrir o app completo', url: APP_URL }],
@@ -1049,6 +1081,7 @@ const HOJE = { inline_keyboard: [
   [BTN('🎯 Top 10 Chutes', '/topchutes'), BTN('🧱 Top 10 Faltas', '/topfaltas')],
   [BTN('🗓️ Jogos', '/jogos'), BTN('🚑 Desfalques', '/desfalques'), BTN('📋 Resumo', '/resumo')],
   [BTN('🕵️ Caçador', '/cacador'), BTN('🔥 Sequências', '/sequencias'), BTN('🟨 Árbitros', '/arbitros')],
+  [BTN('📈 Tendência', '/tendencia'), BTN('🧪 Placar', '/estrategias')],
   [BTN('🖼️ Cards do dia', '/cards'), BTN('🎟️ Múltipla', '/multipla 3')], [BTN('☰ Todos os mercados', '/menu')]] };
 const MODELO_HUB = { inline_keyboard: [
   [BTN('🎯 Top 10 Chutes', '/topchutes'), BTN('🧱 Top 10 Faltas', '/topfaltas')],
@@ -1083,6 +1116,7 @@ async function answer(text: string, chatId: number, page = 1): Promise<Out> {
   const d = await data();
   if (cmd === 'modelo') return modeloCmd(d, rest, chatId);
   if (cmd === 'cacador' || cmd === 'hunter') return cacadorCmd(d, rest, page);
+  if (cmd === 'tendencia' || cmd === 'tendencias') return tendenciaCmd(d);
   if (cmd === 'sequencias' || cmd === 'sequencia') return sequenciasCmd(d, rest, page);
   if (cmd === 'arbitros' || cmd === 'arbitro') return arbitrosCmd(d, page);
   if (cmd === 'topchutes' || cmd === 'topfaltas') { const k = cmd === 'topfaltas' ? 'faltas' : 'chutes'; const T = MT[k]; return list(d, tops(d)[k], `${T.ic} TOP 10 MODELO BH · ${T.title}`, 10, raw, page, true, 'O Modelo BH ainda não rodou para os jogos de hoje, ou não há titulares prováveis com linha boa.', d.rows.some(r => r.d) ? ' · melhor casa' : ' · linha de referência'); }
@@ -1181,8 +1215,8 @@ async function handle(update: any) {
         let r: Row | undefined, src = 'modelo';
         if (bt[1] !== 'bm') {
           const i = bt[2].lastIndexOf(':'); src = bt[2].slice(i + 1); const key = bt[2].slice(0, i);
-          r = d.rows.find(x => keyOf(x) === key);
-          if (!r) { const [pid, mk, l] = key.split('|'); const base = d.rows.find(x => x.id === pid && x.m === mk); if (base) r = { ...base, l: +l, p: pAt(d, pid, mk, +l) ?? base.p }; }
+          r = [...d.rows, ...(d.rowsU ?? [])].find(x => keyOf(x) === key);
+          if (!r && !key.endsWith('|u')) { const [pid, mk, l] = key.split('|'); const base = d.rows.find(x => x.id === pid && x.m === mk); if (base) r = { ...base, l: +l, p: pAt(d, pid, mk, +l) ?? base.p }; }
         } else {
           const [pid, mk, line] = bt[2].split(':'); const m = d.mdl?.p?.[pid];
           if (m) r = { id: pid, n: m.n, t: m.tn, o: m.on, home: m.home, g: m.g, lg: 0, utc: m.utc, fase: '', k: 'p', m: mk, s: 'o', l: +line, p: pAt(d, pid, mk, +line) ?? .5, d: null, b: null, e: null, pj: 0, hit: null, h5: null, nt: null as unknown as number, gr: '' } as Row;
@@ -1254,7 +1288,7 @@ Deno.serve(async (req: Request) => {
     const cmds = await TG('setMyCommands', { commands: [
       ['top', 'Melhores do dia (ex.: /top 20)'], ['valor', 'Valor com odd de casa'], ['seguras', 'Chance de 65% ou mais'], ['chutes', 'Chutes'], ['nogol', 'Chutes ao gol'], ['primeiro', 'Chutes no 1º tempo'],
       ['faltas', 'Faltas cometidas'], ['sofridas', 'Faltas sofridas'], ['desarmes', 'Desarmes'], ['defesas', 'Defesas do goleiro'], ['times', 'Mercados de time'], ['totais', 'Totais do jogo'],
-      ['jogo', 'Linhas de um jogo'], ['jogador', 'Linhas de um jogador'], ['cacador', 'Caçador de props (filtros)'], ['sequencias', 'Sequências de 5+ jogos'], ['arbitros', 'Árbitros do dia'], ['multipla', 'Múltipla (ex.: /multipla 3)'], ['jogos', 'Jogos de hoje'], ['desfalques', 'Desfalques'], ['resumo', 'Resumo da rodada'],
+      ['jogo', 'Linhas de um jogo'], ['jogador', 'Linhas de um jogador'], ['cacador', 'Caçador de props (filtros)'], ['tendencia', 'Método Tendência'], ['sequencias', 'Sequências de 5+ jogos'], ['arbitros', 'Árbitros do dia'], ['multipla', 'Múltipla (ex.: /multipla 3)'], ['jogos', 'Jogos de hoje'], ['desfalques', 'Desfalques'], ['resumo', 'Resumo da rodada'],
       ['cards', 'Melhores do dia em imagem'], ['modelo', 'Modelo BH: chance de qualquer linha'], ['testes', 'Testes do Modelo BH'], ['topchutes', 'Top 10 do modelo em chutes'], ['topfaltas', 'Top 10 em faltas e desarmes'],
       ['receber', 'Receber os tops todo dia'], ['banca', 'Entradas registradas, lucro e ROI'], ['ontem', 'Resultado de ontem'], ['estrategias', 'Modelo por mercado: placar e entradas'], ['gabarito', 'Gabarito de ontem por mercado'],
       ['hoje', 'Listas de hoje'], ['ajuda', 'Todos os comandos'], ['app', 'Abrir o app']].map(([command, description]) => ({ command, description })) });

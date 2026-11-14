@@ -68,3 +68,38 @@ test('Top 10 forte e Oportunidade forte: EV 8%/10%, nota A/A+, uma por jogador, 
   assert.deepEqual(of('oport-forte'), []); // tudo o que tinha EV 10%+ já foi pego por outra estratégia
   assert.ok(s.strategies.some(x => x.id === 'oport-forte' && x.max === 6));
 });
+import { tdCheck, pickTendencia } from '../collector/strategies.js';
+import { buildBotData } from '../collector/botdata.js';
+test('Tendência: todos os critérios, mais e menos, jogo com os dois times', () => {
+  const fut = new Date(Date.now() + 36e5).toISOString();
+  const P = (extra = {}) => ({ id: '1', n: 'A', k: 'p', st: 'xi', ps: 1, ms: 85, m: 'SH', s: 'o', l: 0.5, d: 1.8, utc: fut, p: 0.6,
+    td: { l5: [4, 5], l10: [7, 10], l20: [13, 20], vs: [1, 2], df: [1.5, 6, 20] }, ...extra });
+  assert.ok(tdCheck(P()));
+  assert.equal(tdCheck(P({ d: 1.55 })), null);                                              // odd fora de 1,60–2,30
+  assert.equal(tdCheck(P({ td: { ...P().td, l10: [6, 10] } })), null);                     // 6/10
+  assert.equal(tdCheck(P({ td: { ...P().td, l5: [3, 5] } })), null);                       // 3/5
+  assert.equal(tdCheck(P({ td: { ...P().td, vs: [0, 2] } })), null);                       // 0/2 contra ele
+  assert.ok(tdCheck(P({ td: { ...P().td, vs: [0, 0] } })));                                 // nenhum jogo contra: passa
+  assert.equal(tdCheck(P({ td: { ...P().td, df: [1.1, 8, 20] } })), null);                 // 8º de 20: fora dos 7 que mais cedem
+  assert.equal(tdCheck(P({ ms: 65 })), null);                                               // minutos baixos
+  // MENOS de time: adversário entre os que MENOS cedem (14º de 20 ou pior)
+  const U = (rank) => ({ id: 't1-9', n: 'Time', k: 't', m: 'TSH', s: 'u', l: 12.5, d: 1.9, utc: fut, p: 0.5, td: { l5: [4, 5], l10: [8, 10], l20: [15, 20], vs: [0, 0], df: [9.1, rank, 20] } });
+  assert.ok(tdCheck(U(15))); assert.equal(tdCheck(U(13)), null);
+  // jogo: os dois times precisam passar na sequência
+  const J = (l10b) => ({ id: 'j9', n: 'A x B', k: 'j', m: 'JSH', s: 'o', l: 24.5, d: 1.85, utc: fut, p: 0.5,
+    td: { both: 1, l5: [[4, 5], [5, 5]], l10: [[8, 10], l10b], l20: [[15, 20], [14, 20]], vs: [1, 1], df: [[27, 3, 20], [26, 5, 20]] } });
+  assert.ok(tdCheck(J([7, 10]))); assert.equal(tdCheck(J([6, 10])), null);
+  // 1 por jogador, ordem pela sequência
+  const pk = pickTendencia({ rows: [P(), P({ m: 'SOT', td: { ...P().td, l10: [9, 10] } }), P({ id: '2', td: { ...P().td, l10: [8, 10] } })], rowsU: [U(16)] });
+  assert.deepEqual(pk.map(r => r.id + r.m), ['1SOT', 't1-9TSH', '2SH']); // empate em L10 e L5: L20 decide
+});
+test('linhas de MENOS de time viram rowsU (fora das listas do bot)', () => {
+  const lines = new Map([['5|t1-5|TSH|12.5|u', [{ house: 'Casa', odd: 1.9 }]], ['5|t1-5|TSH|12.5', [{ house: 'Casa', odd: 1.9 }]]]);
+  const slate = { date: 'd', gen: 'g', games: [{ id: 5, lg: 71, utc: new Date(Date.now() + 36e5).toISOString(), home: { id: 1, name: 'A' }, away: { id: 2, name: 'B' }, fase: 'abertura' }],
+    model: { players: {}, teams: { 5: { pj: { h: { sh: 12, sot: 4, fc: 12 }, a: { sh: 10, sot: 3, fc: 13 } }, last: { h: [[1, 10, 3, 11, 9, 3, 12]], a: [] }, h2h: [], def: { h: null, a: null } } } } };
+  const b = buildBotData(slate, lines);
+  const o = b.rows.find(r => r.id === 't1-5' && r.m === 'TSH' && r.l === 12.5), u = b.rowsU.find(r => r.id === 't1-5' && r.m === 'TSH');
+  assert.ok(o && u && u.s === 'u');
+  assert.ok(Math.abs(o.p + u.p - 1) < 0.002);
+  assert.equal(b.rows.filter(r => r.s === 'u').length, 0);
+});

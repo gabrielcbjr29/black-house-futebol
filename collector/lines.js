@@ -83,7 +83,7 @@ export function mergeLines(houses, slate) {
       if (target) (claims[`${h.house}|${g.id}|${target}`] ??= new Set()).add(norm(x.player));
     }
     if (!target) { miss.push({ house: h.house, why: x.type === 'player' ? 'jogador' : 'time', x }); continue; }
-    const key = `${g.id}|${target}|${x.mk}|${line}`;
+    const key = `${g.id}|${target}|${x.mk}|${line}${x.side === 'u' && x.type !== 'player' ? '|u' : ''}`;
     if (x.type === 'player') keyHouse.push([key, h.house, `${h.house}|${g.id}|${target}`, x]);
     const arr = out.get(key) ?? out.set(key, []).get(key);
     const prev = arr.find(a => a.house === h.house);

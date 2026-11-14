@@ -45,9 +45,10 @@ export function fmtEntries(list: any[]) {
     return `⚽ <b>${esc(title)}</b>${g.tip_utc ? ' · ' + hourBR(g.tip_utc) : ''}\n<blockquote>` + xs.map(x => {
       i++; regs.push({ text: `📝 ${i}`, callback_data: `bet:${x.pid}|${x.mk}|${x.line}:e.${x.strategy_id}`.slice(0, 64) });
       const who = x.pid.startsWith('j') ? 'Jogo' : x.pid.startsWith('t') ? esc(x.team) : esc(x.name);
-      const evs = x.edge == null ? '' : ` · EV <b>${pct(+x.edge)}</b>${+x.edge >= .1 ? ' 🔥' : ''}`;
-      const sq = x.sq?.length && !x.pid.startsWith('j') ? '\n' + sqLine(x.sq, +x.line) : '';
-      return `<b>${i}. ${who}</b> · ${MKN[x.mk] ?? x.mk}\n⬆️ Mais de <b>${n1(+x.line)}</b> · @${n2(+x.odd)} ${esc(x.odd_src ?? '')} · ${Math.round(+x.p * 100)}%${evs}${sq}`;
+      const td = x.strategy_id === 'tendencia';
+      const evs = td ? ' · 📈 <i>sinal da sequência, não do modelo</i>' : x.edge == null ? '' : ` · EV <b>${pct(+x.edge)}</b>${+x.edge >= .1 ? ' 🔥' : ''}`;
+      const sq = x.sq?.length && !x.pid.startsWith('j') && x.side !== 'u' ? '\n' + sqLine(x.sq, +x.line) : '';
+      return `<b>${i}. ${who}</b> · ${MKN[x.mk] ?? x.mk}\n${x.side === 'u' ? '⬇️ Menos' : '⬆️ Mais'} de <b>${n1(+x.line)}</b> · @${n2(+x.odd)} ${esc(x.odd_src ?? '')} · ${td ? 'modelo ' : ''}${Math.round(+x.p * 100)}%${evs}${sq}`;
     }).join('\n') + '</blockquote>';
   });
   return { blocks, regs, n: i };
@@ -100,13 +101,16 @@ async function record(silent = false) {
   // papel grava TODAS; alerta só EV ≥ mínimo (bot_config ALERT_EV) e UMA por jogador/time no dia (a de maior EV),
   // porque mercados do mesmo jogador (chutes e chutes ao gol) andam juntos
   const evMin = +((await cfg('ALERT_EV')) ?? .05) || .05;
+  // estratégias com alerta "sempre" (Tendência) não usam o corte de EV; a regra de 1 alerta por jogador/time no dia vale para todas
+  const always = new Set(st.strategies.filter((s: any) => s.alert === 'sempre').map((s: any) => s.id));
   const alertedPid = new Set(have.filter(h => h.alerted).map(h => h.pid)), best = new Map<string, any>();
-  for (const x of fresh) if ((x.edge ?? -1) >= evMin && !alertedPid.has(x.pid) && (!best.has(x.pid) || x.edge > best.get(x.pid).edge)) best.set(x.pid, x);
+  const score = (x: any) => always.has(x.strategy_id) ? Math.max(x.edge ?? -1, evMin) : (x.edge ?? -1);
+  for (const x of fresh) if ((always.has(x.strategy_id) || (x.edge ?? -1) >= evMin) && !alertedPid.has(x.pid) && (!best.has(x.pid) || score(x) > score(best.get(x.pid)))) best.set(x.pid, x);
   for (const x of fresh) x.alerted = best.get(x.pid) === x;
   const up = (list: any[]) => sb('strategy_picks?on_conflict=date,strategy_id,pid,mk', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(list) });
   if (rows.length) await up(rows);
   if (fresh.length) await up(fresh);
-  const toAlert = fresh.filter(x => x.alerted).sort((a, b) => b.edge - a.edge);
+  const toAlert = fresh.filter(x => x.alerted).sort((a, b) => (b.edge ?? -1) - (a.edge ?? -1));
   const alertas = silent ? 0 : await alert(toAlert, evMin).catch(e => { console.error('alerta', e); return 0; });
   const bot = await getJ('bot.json').catch(() => null);
   const risk = bot?.date === st.date ? await risco(bot).catch(e => ({ erro: String(e) })) : { skip: 'bot.json de outro dia' };
@@ -175,7 +179,7 @@ function pNow(bot: any, x: any, L: number) {
 }
 async function risco(bot: any) {
   const now = Date.now();
-  const open: any[] = (await sb(`strategy_picks?date=eq.${bot.date}&status=eq.aberta&alerted=eq.true&select=id,strategy_id,pid,name,team,opp,gid,mk,line,odd,open_line,open_odd,odd_src,p,risk,tip_utc`) ?? [])
+  const open: any[] = (await sb(`strategy_picks?date=eq.${bot.date}&status=eq.aberta&alerted=eq.true&select=id,strategy_id,pid,name,team,opp,gid,mk,side,line,odd,open_line,open_odd,odd_src,p,risk,tip_utc`) ?? [])
     .filter((x: any) => !x.tip_utc || Date.parse(x.tip_utc) > now);
   if (!open.length) return { vigiadas: 0, alertas: 0 };
   const games = Object.fromEntries((bot.games ?? []).map((g: any) => [g.id, g]));
@@ -189,7 +193,7 @@ async function risco(bot: any) {
       else if (m?.st === 'duvida') conds['duvida'] = `${esc(x.name)} está <b>em dúvida</b> para o jogo`;
       if (m?.st === 'xi') conds['xi'] = ''; // titular confirmado: registra sem alertar
     }
-    const pn = pNow(bot, x, L);
+    const pn0 = pNow(bot, x, L), pn = pn0 == null ? null : x.side === 'u' ? 1 - pn0 : pn0;
     if (pn != null) {
       if (pn < .5) conds['p:virou'] = `O modelo agora dá <b>${Math.round(pn * 100)}%</b> na linha ${n1(L)} (era ${Math.round(+x.p * 100)}%)`;
       else if (+x.p - pn >= .1) conds['p:caiu'] = `O modelo caiu para <b>${Math.round(pn * 100)}%</b> na linha ${n1(L)} (era ${Math.round(+x.p * 100)}%)`;
@@ -204,7 +208,7 @@ async function risco(bot: any) {
   let alertas = 0;
   if (items.length) {
     let text = `⚠️ <b>ALERTA DE RISCO · ENTRADA${items.length > 1 ? 'S' : ''} JÁ ENVIADA${items.length > 1 ? 'S' : ''}</b>\n<i>O cenário mudou depois do alerta.</i>\n\n` + items.map(({ x, why }) =>
-      `⚽ <b>${esc(x.team)} x ${esc(x.opp)}</b>${x.tip_utc ? ' · ' + hourBR(x.tip_utc) : ''}\n<blockquote><b>${esc(x.name)}</b> · ${MKN[x.mk] ?? x.mk}\n⬆️ Mais de <b>${n1(+(x.open_line ?? x.line))}</b> · @${n2(+(x.open_odd ?? x.odd))}\n${why.map(w => '• ' + w).join('\n')}</blockquote>`).join('\n\n')
+      `⚽ <b>${esc(x.team)} x ${esc(x.opp)}</b>${x.tip_utc ? ' · ' + hourBR(x.tip_utc) : ''}\n<blockquote><b>${esc(x.name)}</b> · ${MKN[x.mk] ?? x.mk}\n${x.side === 'u' ? '⬇️ Menos' : '⬆️ Mais'} de <b>${n1(+(x.open_line ?? x.line))}</b> · @${n2(+(x.open_odd ?? x.odd))}\n${why.map(w => '• ' + w).join('\n')}</blockquote>`).join('\n\n')
       + `\n\n<i>Se ainda não entrou, reavalie. Se já entrou, veja se vale proteger. O placar segue contando a entrada como foi enviada.</i>`;
     if (text.length > 4090) text = text.slice(0, 4000).replace(/<[^>]*$/, '') + '…';
     alertas = await send(text, { inline_keyboard: [[{ text: '🧪 Placar', callback_data: '/estrategias' }, { text: '💼 Banca', callback_data: '/banca' }]] });

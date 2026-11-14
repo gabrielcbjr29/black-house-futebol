@@ -55,7 +55,8 @@ export function teamProfiles(fixtures, LP, { half = 12, K = 5, maxN = 38 } = {})
     const sh = x => r3((x + K) / (s.w + K));
     const dom = +Object.entries(lgCount).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
     out[id] = { n: ms.length, lg: dom, shF: sh(s.shF), shA: sh(s.shA), sotF: sh(s.sotF), sotA: sh(s.sotA), fcF: sh(s.fcF), fcA: sh(s.fcA), poss: r3((s.poss + 50 * K) / (s.w + K)),
-      last: ms.slice(0, 10).map(({ f, me, op }) => [f.id, f.t[me][T.sh], f.t[me][T.sot], f.t[me][T.fc], f.t[op][T.sh], f.t[op][T.sot], f.t[op][T.fc]]) };
+      // últimos 20 jogos (a Tendência usa L20; as telas usam os 10 primeiros)
+      last: ms.slice(0, 20).map(({ f, me, op }) => [f.id, f.t[me][T.sh], f.t[me][T.sot], f.t[me][T.fc], f.t[op][T.sh], f.t[op][T.sot], f.t[op][T.fc]]) };
   }
   return out;
 }
@@ -205,4 +206,58 @@ export function oppPosition(fixtures, { half = 12, maxN = 38, K = 40 } = {}) {
     out[tid] = res;
   }
   return out;
+}
+
+/* Defesa na liga (para a Tendência): o quanto cada time cede, comparado aos outros times da MESMA liga nacional.
+   - por posição: estatística dos jogadores adversários daquela posição a cada 90 minutos deles (G, D, M, F);
+   - time: o que os adversários fazem por jogo (chutes, no gol, faltas) e o que o próprio time sofre de falta;
+   - jogo: total por jogo (os dois times somados) nos jogos dele.
+   Janela: os últimos 12 jogos de liga de cada time. Ranking só entre times da temporada atual daquela liga.
+   pct = posição ÷ número de times (perto de 0 = um dos que MAIS cedem; perto de 1 = um dos que MENOS cedem). */
+const DEF_P = ['sh', 'sot', 'fc', 'fs', 'tk', 'sv'];
+export function defenseRanks(fixtures, { win = 12 } = {}) {
+  const byTeam = {}, curS = {};
+  for (let i = fixtures.length - 1; i >= 0; i--) {
+    const f = fixtures[i]; if (f.lg === UCL || !f.t?.[f.h] || !f.t?.[f.a]) continue;
+    curS[f.lg] = Math.max(curS[f.lg] ?? 0, f.s);
+    for (const [me, op] of [[f.h, f.a], [f.a, f.h]]) (byTeam[me] ??= []).push({ f, me, op });
+  }
+  const val = {};
+  for (const [tid, list] of Object.entries(byTeam)) {
+    const lgC = {}; for (const { f } of list.slice(0, win)) lgC[f.lg] = (lgC[f.lg] || 0) + 1;
+    const lg = +Object.entries(lgC).sort((a, b) => b[1] - a[1])[0][0];
+    if (!list.some(({ f }) => f.lg === lg && f.s === curS[lg])) continue; // não está na liga nesta temporada
+    const ms = list.filter(({ f }) => f.lg === lg).slice(0, win);
+    if (ms.length < 4) continue;
+    const pos = {};
+    for (const { f, me } of ms) for (const p of f.p) {
+      if (String(p[P.team]) === String(me) || !(p[P.min] > 0) || !p[P.pos]) continue;
+      const a = pos[p[P.pos]] ??= { m: 0, ...Object.fromEntries(DEF_P.map(k => [k, 0])) };
+      a.m += p[P.min] / 90; for (const k of DEF_P) a[k] += p[P[k]] || 0;
+    }
+    const per = (x, k) => x && x.m >= 3 ? r3(x[k] / x.m) : null;
+    const avg = fn => r3(ms.reduce((a, x) => a + fn(x), 0) / ms.length);
+    val[tid] = { lg, n: ms.length,
+      pos: Object.fromEntries(['G', 'D', 'M', 'F'].map(ps => [ps, Object.fromEntries(DEF_P.map(k => [k, per(pos[ps], k)]))])),
+      t: { sh: avg(({ f, op }) => f.t[op][T.sh]), sot: avg(({ f, op }) => f.t[op][T.sot]), fc: avg(({ f, me }) => f.t[me][T.fc] /* faltas que sofre = cometidas pelo outro */) , fcO: avg(({ f, op }) => f.t[op][T.fc]) },
+      j: { sh: avg(({ f, me, op }) => f.t[me][T.sh] + f.t[op][T.sh]), sot: avg(({ f, me, op }) => f.t[me][T.sot] + f.t[op][T.sot]), fc: avg(({ f, me, op }) => f.t[me][T.fc] + f.t[op][T.fc]) } };
+  }
+  // ranking dentro de cada liga (1 = o que MAIS cede)
+  const byLg = {}; for (const [tid, v] of Object.entries(val)) (byLg[v.lg] ??= []).push(tid);
+  const rank = (ids, get) => { const xs = ids.map(id => [id, get(val[id])]).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]); return Object.fromEntries(xs.map(([id], i) => [id, [i + 1, xs.length]])); };
+  const out = {};
+  for (const ids of Object.values(byLg)) {
+    const R = {};
+    for (const ps of ['G', 'D', 'M', 'F']) for (const k of DEF_P) R['p' + ps + k] = rank(ids, v => v.pos[ps][k]);
+    for (const k of ['sh', 'sot', 'fcO']) R['t' + k] = rank(ids, v => v.t[k]);
+    for (const k of ['sh', 'sot', 'fc']) R['j' + k] = rank(ids, v => v.j[k]);
+    for (const id of ids) {
+      const v = val[id], g = key => R[key][id] ?? null;
+      out[id] = { lg: v.lg, n: ids.length,
+        pos: Object.fromEntries(['G', 'D', 'M', 'F'].map(ps => [ps, Object.fromEntries(DEF_P.map(k => [k, v.pos[ps][k] == null ? null : [v.pos[ps][k], ...g('p' + ps + k)]]))])),
+        t: { sh: [v.t.sh, ...g('tsh')], sot: [v.t.sot, ...g('tsot')], fc: [v.t.fcO, ...g('tfcO')] },
+        j: { sh: [v.j.sh, ...g('jsh')], sot: [v.j.sot, ...g('jsot')], fc: [v.j.fc, ...g('jfc')] } };
+    }
+  }
+  return out; // [valor, posição, de quantos]
 }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Black House Futebol · leitor farra.bet
 // @namespace    blackhouse-futebol
-// @version      1.0
+// @version      1.1
 // @description  Com uma aba da farra.bet aberta no seu navegador, lê de 30 em 30 min as linhas de chutes, faltas cometidas, desarmes e defesas (jogador) e de chutes/chutes ao gol (time e jogo) das ligas do projeto e manda para o Black House Futebol.
 // @match        https://farra.bet/*
 // @grant        none
@@ -20,7 +20,7 @@
   const CONFERE = { 'Champions League': /UEFA Champions League$/i };
   // mercados de jogador: "Nome — N ou mais …" vira MAIS de N−0,5
   const PLAYER = { 'Chutes do jogador': 'SH', 'Faltas cometidas pelo jogador (ou mais)': 'FC', 'Desarmes do jogador (N ou mais)': 'TK', 'Defesas do goleiro (N ou mais)': 'SV' };
-  // time e jogo: "Mais de 16,5"
+  // time e jogo: "Mais de 16,5" e "Menos de 16,5"
   const TEAM = { 'Finalizações — casa (total)': ['TSH', 0], 'Finalizações — fora (total)': ['TSH', 1], 'Chutes a gol — casa (total)': ['TSOT', 0], 'Chutes a gol — fora (total)': ['TSOT', 1] };
   const MATCH = { 'Total de finalizações': 'JSH', 'Total de chutes a gol': 'JSOT' };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -70,15 +70,16 @@
             const lado = b.closest('section[data-sbjj-time]')?.dataset.sbjjTime;
             lines.push({ ...base, type: 'player', player: x[1].trim(), team: lado === 'home' ? home : lado === 'away' ? away : undefined, mk: PLAYER[m], line: +x[2] - 0.5, odd });
           } else if (TEAM[m] || MATCH[m]) {
-            const x = rot.match(/^Mais de\s+(\d+(?:[.,]\d+)?)/); if (!x) continue;
-            if (TEAM[m]) lines.push({ ...base, type: 'team', team: TEAM[m][1] ? away : home, mk: TEAM[m][0], line: num(x[1]), odd });
-            else lines.push({ ...base, type: 'match', mk: MATCH[m], line: num(x[1]), odd });
+            const x = rot.match(/^(Mais|Menos) de\s+(\d+(?:[.,]\d+)?)/); if (!x) continue;
+            const side = x[1] === 'Menos' ? 'u' : undefined;
+            if (TEAM[m]) lines.push({ ...base, type: 'team', team: TEAM[m][1] ? away : home, mk: TEAM[m][0], line: num(x[2]), odd, side });
+            else lines.push({ ...base, type: 'match', mk: MATCH[m], line: num(x[2]), odd, side });
           }
         }
       } catch (err) { erros.push(j.id + ': ' + err.message); }
       await sleep(700); // sem pressa: um jogo de cada vez
     }
-    const key = x => [x.home, x.away, x.type, x.player ?? x.team ?? '', x.mk, x.line].join('|'), u = new Map();
+    const key = x => [x.home, x.away, x.type, x.player ?? x.team ?? '', x.mk, x.line, x.side ?? 'o'].join('|'), u = new Map();
     for (const x of lines) u.set(key(x), x);
     return { house: HOUSE, jogos: jogos.size, lines: [...u.values()], erros };
   }

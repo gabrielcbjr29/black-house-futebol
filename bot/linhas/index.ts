@@ -28,10 +28,10 @@ Deno.serve(async (req: Request) => {
     const p = JSON.parse(raw);
     const house = String(p?.house ?? '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 30);
     if (!house || !Array.isArray(p?.lines)) return json({ ok: false, erro: 'formato: { house, lines: [...] }' }, 400);
-    // só o que o modelo usa: mercado conhecido, linha e odd válidas (só MAIS)
+    // só o que o modelo usa: mercado conhecido, linha e odd válidas (MAIS; MENOS vem com side 'u', só em time e jogo)
     const lines = p.lines.filter((x: any) => MK.has(x?.mk) && +x.line >= 0 && +x.odd > 1 && x.home && x.away && (x.type === 'match' || x.team || x.player))
       .map((x: any) => ({ home: String(x.home).slice(0, 60), away: String(x.away).slice(0, 60), utc: x.utc ?? null, league: x.league ?? null, type: x.type === 'team' || x.type === 'match' ? x.type : 'player',
-        player: x.player ? String(x.player).slice(0, 60) : undefined, team: x.team ? String(x.team).slice(0, 60) : undefined, mk: x.mk, line: +x.line, odd: +x.odd }));
+        player: x.player ? String(x.player).slice(0, 60) : undefined, team: x.team ? String(x.team).slice(0, 60) : undefined, mk: x.mk, line: +x.line, odd: +x.odd, side: x.side === 'u' ? 'u' : undefined }));
     await sb('line_snapshots', { method: 'POST', body: JSON.stringify({ house, n_lines: lines.length, payload: { lines } }) });
     return json({ ok: true, house, linhas: lines.length, descartadas: p.lines.length - lines.length });
   } catch (e) { return json({ ok: false, erro: String((e as Error).message) }, 500); }

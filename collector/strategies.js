@@ -49,6 +49,41 @@ const EXTRA = [
       .sort((a, b) => edgeOf(b) - edgeOf(a)) },
 ];
 
+/* 📈 Tendência: método à parte, sem depender do modelo. Entra só se passar em TODOS os critérios:
+   sequência 7+/10 e 4+/5 na linha da casa e no lado da entrada (titular 60+ min; no jogo, os DOIS times nos seus jogos);
+   50%+ contra o adversário (ou nenhum jogo contra ele); adversário entre os ~35% que MAIS cedem aquilo (MAIS) ou que
+   MENOS cedem (MENOS) na liga dele (7 de 20), por posição no caso do jogador; odd de casa entre 1,60 e 2,30;
+   jogador titular confirmado ou provável (80%+) com 70+ minutos esperados. MENOS só existe em time e jogo.
+   1 por jogador/time por dia (a de melhor sequência), até 10, pela ordem L10, L5, L20, odd. */
+export const TD = { oddMin: 1.6, oddMax: 2.3, share: 0.35, l10: 7, l5: 4, vs: 0.5, minMs: 70, max: 10 };
+const ok = (h, need, n) => !!h && h[1] >= n && h[0] >= need;
+export function tdCheck(r) {
+  const t = r.td; if (!t || !r.d || r.d < TD.oddMin - 1e-9 || r.d > TD.oddMax + 1e-9) return null;
+  if (r.k === 'p' && !(starter(r) && (r.ms ?? 0) >= TD.minMs)) return null;
+  const seq = t.both ? [0, 1].every(i => ok(t.l10[i], TD.l10, 10) && ok(t.l5[i], TD.l5, 5)) : ok(t.l10, TD.l10, 10) && ok(t.l5, TD.l5, 5);
+  if (!seq) return null;
+  if (t.vs?.[1] > 0 && t.vs[0] / t.vs[1] < TD.vs) return null;
+  const u = r.s === 'u';
+  const topN = d => Math.round(d[2] * TD.share);
+  const good = (rank, n, N) => u ? rank > n - N : rank <= N;
+  let dfOk;
+  if (t.both) { const [a, b] = t.df ?? []; dfOk = !!(a && b) && good((a[1] + b[1]) / 2, (a[2] + b[2]) / 2, (topN(a) + topN(b)) / 2); }
+  else dfOk = !!t.df && good(t.df[1], t.df[2], topN(t.df));
+  if (!dfOk) return null;
+  const sum = h => Array.isArray(h?.[0]) ? h.reduce((a, x) => [a[0] + x[0], a[1] + x[1]], [0, 0]) : h;
+  const k10 = sum(t.l10), k5 = sum(t.l5), k20 = sum(t.l20);
+  return [k10[0] / k10[1], k5[0] / k5[1], k20 ? k20[0] / k20[1] : 0, r.d];
+}
+export function pickTendencia(bot) {
+  const cand = [...bot.rows, ...(bot.rowsU ?? [])].filter(fresh).map(r => [r, tdCheck(r)]).filter(([, k]) => k)
+    .sort(([, a], [, b]) => (b[0] - a[0]) || (b[1] - a[1]) || (b[2] - a[2]) || (b[3] - a[3]));
+  const seen = new Set(), out = [];
+  for (const [r] of cand) { if (seen.has(r.id)) continue; seen.add(r.id); out.push(r); if (out.length >= TD.max) break; }
+  return out;
+}
+const TEND = { id: 'tendencia', name: 'Tendência', markets: MKT, max: TD.max, group: 'tendencia', alert: 'sempre',
+  descr: 'Método à parte, sem depender do modelo: 7+ acertos nos últimos 10 e 4+ nos últimos 5 na linha da casa (titular 60+ min), 50%+ contra o adversário (ou nenhum jogo), adversário entre os ~35% que mais cedem (mais) ou menos cedem (menos) aquilo na liga, odd entre 1,60 e 2,30, titular com 70+ min esperados. Mais e menos (menos só em time e jogo). 1 por jogador, até 10 por dia.' };
+
 const toPick = (S, r) => ({ strategy_id: S.id, pid: r.id, name: r.n, team: r.t, opp: r.o, gid: r.g, mk: r.m, side: r.s === 'u' ? 'u' : 'o', line: r.l, odd: r.d,
   odd_src: r.b, p: r.p, edge: Math.round(edgeOf(r) * 1e4) / 1e4, nota: r.nt, tip_utc: r.utc, fase: r.fase, sq: r.sq?.length ? r.sq : (r.jh ?? null) });
 
@@ -75,5 +110,7 @@ export function pickStrategies(bot) {
       if (++k >= S.max) break;
     }
   }
-  return { date: bot.date, gen: bot.gen, strategies: [...STRATEGIES.map(({ test, ...s }) => ({ ...s, group: 'modelo' })), ...EXTRA.map(({ pick, ...s }) => s)], picks: out };
+  // Tendência: lista própria, independente das outras (pode repetir alvo e pegar o lado que o modelo não escolheu)
+  for (const r of pickTendencia(bot)) out.push(toPick(TEND, r));
+  return { date: bot.date, gen: bot.gen, strategies: [...STRATEGIES.map(({ test, ...s }) => ({ ...s, group: 'modelo' })), ...EXTRA.map(({ pick, ...s }) => s), TEND], picks: out };
 }

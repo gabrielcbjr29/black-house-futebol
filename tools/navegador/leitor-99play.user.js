@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Black House Futebol · leitor 99play
 // @namespace    blackhouse-futebol
-// @version      1.0
+// @version      1.1
 // @description  Com uma aba da 99play aberta no seu navegador, lê de 30 em 30 min as linhas de chutes, chutes ao gol e defesas (jogador, time e jogo) das ligas do projeto e manda para o Black House Futebol.
 // @match        https://99play.io/*
 // @grant        none
@@ -16,7 +16,7 @@
   const BASE = 'https://sb2frontend-altenar2.biahosted.com/api/widget/';
   // ligas do projeto (champIds da Altenar)
   const CHAMPS = { 2936: 'Premier League', 2941: 'La Liga', 2942: 'Serie A', 2950: 'Bundesliga', 2943: 'Ligue 1', 11318: 'Brasileirão', 16808: 'Champions League' };
-  // mercados de jogador (childMarkets) e de time/jogo (markets). Odd typeId 12 = MAIS, 13 = MENOS; oddStatus 0 = aberta
+  // mercados de jogador (childMarkets, só MAIS) e de time/jogo (markets, MAIS e MENOS). Odd typeId 12 = MAIS, 13 = MENOS; oddStatus 0 = aberta
   const PLAYER = { 15735: 'SH', 15734: 'SOT', 17938: 'SV' };
   const TEAM = { 15728: ['TSH', 0], 15729: ['TSH', 1], 15726: ['TSOT', 0], 15727: ['TSOT', 1] };
   const MATCH = { 15738: 'JSH', 15737: 'JSOT' };
@@ -38,6 +38,7 @@
         const base = { home, away, utc: e.startDate, league: CHAMPS[e.champId] };
         const odds = Object.fromEntries((d.odds || []).map(o => [o.id, o]));
         const overs = m => (m.desktopOddIds || []).flat().map(i => odds[i]).filter(o => o && o.typeId === 12 && !o.oddStatus && o.price > 1);
+        const unders = m => (m.desktopOddIds || []).flat().map(i => odds[i]).filter(o => o && o.typeId === 13 && !o.oddStatus && o.price > 1);
         const team = Object.fromEntries((d.competitors || []).map(c => [c.id, c.name]));
         for (const m of d.childMarkets || []) {
           const mk = PLAYER[m.typeId]; if (!mk || !m.childName) continue;
@@ -50,13 +51,17 @@
             const [mk, side] = TEAM[m.typeId];
             const tn = names.find(n => String(m.name).includes(n)) ?? (side ? away : home);
             for (const o of overs(m)) lines.push({ ...base, type: 'team', team: tn, mk, line: lineOf(o), odd: o.price });
-          } else if (MATCH[m.typeId]) for (const o of overs(m)) lines.push({ ...base, type: 'match', mk: MATCH[m.typeId], line: lineOf(o), odd: o.price });
+            for (const o of unders(m)) lines.push({ ...base, type: 'team', team: tn, mk, line: lineOf(o), odd: o.price, side: 'u' });
+          } else if (MATCH[m.typeId]) {
+            for (const o of overs(m)) lines.push({ ...base, type: 'match', mk: MATCH[m.typeId], line: lineOf(o), odd: o.price });
+            for (const o of unders(m)) lines.push({ ...base, type: 'match', mk: MATCH[m.typeId], line: lineOf(o), odd: o.price, side: 'u' });
+          }
         }
       } catch (err) { erros.push(e.id + ': ' + err.message); }
       await sleep(400); // sem pressa: um jogo de cada vez
     }
     // tira repetidos (o mesmo mercado aparece em mais de um grupo)
-    const key = x => [x.home, x.away, x.type, x.player ?? x.team ?? '', x.mk, x.line].join('|'), u = new Map();
+    const key = x => [x.home, x.away, x.type, x.player ?? x.team ?? '', x.mk, x.line, x.side ?? 'o'].join('|'), u = new Map();
     for (const x of lines) if (x.line >= 0) u.set(key(x), x);
     return { house: HOUSE, jogos: events.length, lines: [...u.values()], erros };
   }
