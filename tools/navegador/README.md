@@ -50,7 +50,27 @@ A função descarta o que não estiver nesse formato e devolve quantas linhas gu
 (`line_snapshots`): é o histórico de linhas para backtest e CLV. Sem foto nova, a coleta usa a última de cada casa por
 até 18 horas.
 
-## Próximo passo
+## Casas mapeadas (14/11/2026)
 
-Quando você trouxer as 2 ou 3 casas escolhidas, o primeiro trabalho é mapear, em cada uma, como a página carrega os
-mercados de jogador (como foi feito com os `typeIds` da 99play/Altenar) e escrever o leitor dela aqui nesta pasta.
+| Casa | Leitor | Plataforma | Mercados de jogador | Time e jogo |
+|---|---|---|---|---|
+| 99play | `leitor-99play.user.js` | Altenar (widget `sb2frontend-altenar2.biahosted.com`, `integration=24games1`) | Chutes (15735), Chutes a Gol (15734), Defesas do Goleiro (17938) | Chutes do time (15728 casa / 15729 fora), Chutes a Gol do time (15726 / 15727), Totais chutes (15738), Totais chutes a gol (15737) |
+| farra.bet | `leitor-farra.user.js` | própria (páginas prontas no servidor, botões com `data-mercado`/`data-rotulo`/`data-odd`) | Chutes do jogador, Faltas cometidas, Desarmes, Defesas do goleiro ("N ou mais" = mais de N−0,5) | Finalizações casa/fora, Chutes a gol casa/fora, Total de finalizações, Total de chutes a gol |
+
+- **99play:** odd `typeId` 12 = MAIS, 13 = MENOS; `oddStatus` 0 = aberta. Ligas (`champIds`): Premier 2936, La Liga 2941,
+  Serie A 2942, Bundesliga 2950, Ligue 1 2943, Brasileirão 11318, Champions 16808. Cada jogador vem com a escada
+  0,5 / 1,5 / 2,5. Sem faltas, desarmes nem 1º tempo de jogador (pelo menos no Brasileirão).
+- **farra:** ligas por código (`soccer_brazil_campeonato`, `soccer_epl`, `soccer_spain_la_liga`, `soccer_italy_serie_a`,
+  `soccer_germany_bundesliga`, `soccer_france_ligue_one`, `soccer_uefa_champs_league`/`soccer_ls_32644`). Horário na lista
+  como "Hoje 18:30" / "21/11 09:30" (Brasília). Chutes do jogador começam em 2+ (mais de 1,5). Sem chutes ao gol de jogador,
+  faltas sofridas, faltas de time nem 1º tempo.
+- **Ninguém abre:** faltas sofridas, chutes de jogador no 1º tempo, faltas do time/jogo. Esses mercados seguem só com a
+  linha de referência do modelo.
+
+## Como instalar
+
+1. Instale a extensão **Tampermonkey** no Chrome ou Edge (no Chrome, ligue "Permitir scripts do usuário" nos detalhes da extensão).
+2. Crie um script novo, cole o conteúdo do leitor e troque `__LINHAS_TOKEN__` pelo token (o arquivo pronto, com o token,
+   é entregue fora do repositório).
+3. Deixe uma aba de cada casa aberta e fixada (fora da economia de memória). O selo "BH ⚽" no canto mostra a última leitura.
+4. Leitura de 30 em 30 min (aos :05 e :35), antes da coleta do GitHub (:20 e :50).

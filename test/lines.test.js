@@ -24,3 +24,23 @@ test('encaixe das linhas no modelo, com a melhor odd entre as casas', () => {
   // mando invertido não encaixa (casa e fora trocados = outro jogo)
   assert.equal(lines.has('1|j1|JSH|21.5'), false);
 });
+
+test('nomes brasileiros: ordem trocada, nome completo e apelido, sem falso par', () => {
+  const ok = [['Henrique Gustavo Scarpa', 'Gustavo Scarpa'], ['Scarpa Gustavo', 'Gustavo Scarpa'], ['Eduardo Dudu', 'Dudu'], ['Antonio Francisco Moura Neto', 'Neto Moura'],
+    ['Leonardo Duarte', 'Léo Duarte'], ['Hugo \tVitor', 'Vitor Hugo'], ['Frederico Rodrigues De Paula Santos', 'Fred'],
+    ['Cuello', 'Tomás Cuello'], ['Eduardo Vinicius Domachowski', 'Eduardo Doma'], ['Resende Kaua Pascini', 'Kauã Pascini']];
+  for (const [h, a] of ok) assert.ok(playerScore(h, a) >= 0.6, h + ' = ' + a);
+  const no = [['Luis Eduardo Soares da Silva', 'Tulio Eduardo'], ['Victor Luis', 'André Luis'], ['Paulo Ricardo Alves Ibelli', 'João Paulo'], ['Dylan Felipe Borrero Caicedo', 'Yago Felipe'],
+    ['Riquelme', 'Ramon Rique'], ['Carvalho Mateus', 'Miguel Carvalho'], ['Francescoli Hugo', 'Vitor Hugo'], ['Victor Henrique Carvalho Caetano', 'Paulo Henrique']];
+  for (const [h, a] of no) assert.ok(playerScore(h, a) < 0.6, h + ' ≠ ' + a);
+});
+test('encaixe por time e nome ambíguo fica de fora', () => {
+  const slate = { games: [{ id: 7, utc: '2026-11-14T23:30:00Z', home: { id: 1, name: 'Chapecoense-sc' }, away: { id: 2, name: 'Vasco DA Gama' } }],
+    model: { players: { 10: { n: 'David Antunes', t: 1, g: 7 }, 20: { n: 'David', t: 2, g: 7 }, 30: { n: 'Carlos Eduardo', t: 1, g: 7 } } } };
+  const L = (player, team) => ({ home: 'Chapecoense', away: 'CR Vasco da Gama', type: 'player', player, team, mk: 'SH', line: 0.5, odd: 2 });
+  const { lines, miss } = mergeLines([{ house: 'x', payload: { lines: [L('David Correa da Fonseca', 'CR Vasco da Gama'), L('David Antunes', 'Chapecoense'),
+    L('Carlos Eduardo de Oliveira Alves', 'Chapecoense'), L('Carlos Eduardo Ferreira de Souza', 'Chapecoense')] } }], slate);
+  assert.ok(lines.has('7|20|SH|0.5') && lines.has('7|10|SH|0.5'));
+  assert.ok(!lines.has('7|30|SH|0.5'));
+  assert.equal(miss.filter(m => m.why === 'jogador ambíguo').length, 2);
+});

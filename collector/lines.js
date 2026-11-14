@@ -3,6 +3,8 @@
 // encaixa cada linha no jogo, jogador/time e mercado do modelo. Formato da foto: ver tools/navegador/README.md.
 import { getJSON } from './http.js';
 
+// nome de cada casa como aparece no bot e no app
+export const HOUSE_NAME = { '99play': '99play', farra: 'Farra', betano: 'Betano', bet365: 'Bet365', superbet: 'Superbet' };
 const MAX_AGE = 18 * 3600e3; // rede de segurança: sem foto nova, usa a última por até 18 horas
 export const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 const STOP = new Set(['fc', 'cf', 'sc', 'ac', 'afc', 'ssc', 'as', 'rc', 'cd', 'ec', 'se', 'club', 'de', 'do', 'da', 'the', 'and', 'calcio', 'fk', '1', 'u']);
@@ -22,18 +24,23 @@ export function teamScore(a, b) {
   const hit = ta.filter(t => tb.some(u => u === t || (t.length >= 4 && u.startsWith(t)) || (u.length >= 4 && t.startsWith(u)))).length;
   return hit / Math.max(ta.length, tb.length) * 0.9 + (na.includes(nb) || nb.includes(na) ? 0.1 : 0);
 }
-/* nomes de jogador: a API-Football usa "B. Saka"; as casas, "Bukayo Saka" */
+/* nomes de jogador: a API-Football usa "B. Saka" ou o apelido ("Dudu", "Neto Moura"); as casas, o nome completo em
+   qualquer ordem ("Henrique Gustavo Scarpa", "Scarpa Gustavo", "Eduardo Dudu"). Regra: TODAS as palavras do nome da
+   API precisam aparecer no nome da casa (prefixo vale: "Léo" = "Leonardo", "Puma" = "Pumita"); inicial tem de bater.
+   Nome da casa com uma palavra só ("Cuello", "Wallisson") vale se for igual a uma das palavras do nome da API.
+   Só entre os jogadores do time dele; empate ou dois nomes da casa no mesmo jogador = fica de fora. */
+const PSTOP = new Set(['de', 'da', 'do', 'dos', 'das', 'e', 'van', 'von', 'der', 'den', 'di', 'del', 'la', 'le']);
+const ptok = s => norm(s).split(' ').filter(t => t && !PSTOP.has(t));
+const tokEq = (a, b) => a === b || (a.length >= 3 && b.length >= 3 && (a.startsWith(b) || b.startsWith(a)));
 export function playerScore(house, api) {
-  const h = tokens(house), a = norm(api).split(' ').filter(Boolean); if (!h.length || !a.length) return 0;
   if (norm(house) === norm(api)) return 1;
+  const h = ptok(house), a = ptok(api); if (!h.length || !a.length) return 0;
   const aFull = a.filter(t => t.length > 1), aInit = a.filter(t => t.length === 1);
-  const last = aFull[aFull.length - 1];
-  if (!last) return 0;
-  const lastOk = h.includes(last) || h.join(' ').endsWith(aFull.join(' '));
-  if (!lastOk) return 0;
-  const initOk = !aInit.length || aInit.some(i => h.some(t => t[0] === i));
-  const extra = aFull.filter(t => h.includes(t)).length / aFull.length;
-  return (initOk ? 0.6 : 0.3) + 0.4 * extra;
+  if (!aFull.length) return 0;
+  if (aInit.length && !aInit.every(i => h.some(t => t[0] === i))) return 0;
+  if (aFull.every(t => h.some(u => tokEq(t, u)))) return 0.8 + 0.2 * Math.min(1, aFull.length / h.length);
+  if (h.length === 1 && aFull.includes(h[0])) return 0.65; // palavra única: só igual ("Riquelme" não é "Rique")
+  return 0;
 }
 
 export async function fetchHouses(url = process.env.LINHAS_URL, now = Date.now()) {
@@ -46,7 +53,7 @@ export async function fetchHouses(url = process.env.LINHAS_URL, now = Date.now()
 export function mergeLines(houses, slate) {
   const games = slate.games, P = slate.model.players;
   const byGame = {}; for (const [pid, p] of Object.entries(P)) (byGame[p.g] ??= []).push([pid, p]);
-  const out = new Map(), miss = [];
+  const out = new Map(), miss = [], claims = {}, keyHouse = [];
   for (const h of houses) for (const x of h.payload.lines) {
     const odd = +x.odd, line = +x.line; if (!(odd > 1) || !(line >= 0) || !x.mk) continue;
     // jogo: os dois nomes de time e (se vier) o horário perto do oficial
@@ -63,15 +70,32 @@ export function mergeLines(houses, slate) {
       const sh = teamScore(x.team, g.home.name), sa = teamScore(x.team, g.away.name);
       if (Math.max(sh, sa) >= 0.5) target = `t${sh >= sa ? g.home.id : g.away.id}-${g.id}`;
     } else {
-      let bp = 0;
-      for (const [pid, p] of byGame[g.id] ?? []) { const s = playerScore(x.player, p.n); if (s > bp) { bp = s; target = pid; } }
-      if (bp < 0.6) target = null;
+      // só entre os jogadores do time dele (quando a casa diz o time); empate no topo = ambíguo, fica de fora
+      const sh = x.team ? teamScore(x.team, g.home.name) : 0, sa = x.team ? teamScore(x.team, g.away.name) : 0;
+      const side = Math.max(sh, sa) >= 0.5 ? (sh >= sa ? g.home.id : g.away.id) : null;
+      let bp = 0, tie = false;
+      for (const [pid, p] of byGame[g.id] ?? []) {
+        if (side != null && String(p.t) !== String(side)) continue;
+        const s = playerScore(x.player, p.n);
+        if (s > bp) { bp = s; target = pid; tie = false; } else if (s === bp && s > 0) tie = true;
+      }
+      if (bp < 0.6 || (tie && bp < 1)) target = null;
+      if (target) (claims[`${h.house}|${g.id}|${target}`] ??= new Set()).add(norm(x.player));
     }
     if (!target) { miss.push({ house: h.house, why: x.type === 'player' ? 'jogador' : 'time', x }); continue; }
     const key = `${g.id}|${target}|${x.mk}|${line}`;
+    if (x.type === 'player') keyHouse.push([key, h.house, `${h.house}|${g.id}|${target}`, x]);
     const arr = out.get(key) ?? out.set(key, []).get(key);
     const prev = arr.find(a => a.house === h.house);
-    if (prev) prev.odd = Math.max(prev.odd, odd); else arr.push({ house: h.house, odd });
+    if (prev) prev.odd = Math.max(prev.odd, odd); else arr.push({ house: HOUSE_NAME[h.house] ?? h.house, odd });
+  }
+  // dois nomes diferentes da mesma casa caindo no mesmo jogador (ex.: dois "Carlos Eduardo"): não dá para saber qual é
+  for (const [key, house, ck, x] of keyHouse) {
+    if ((claims[ck]?.size ?? 0) < 2) continue;
+    miss.push({ house, why: 'jogador ambíguo', x });
+    const arr = out.get(key); if (!arr) continue;
+    const i = arr.findIndex(a => a.house === house); if (i >= 0) arr.splice(i, 1);
+    if (!arr.length) out.delete(key);
   }
   for (const arr of out.values()) arr.sort((a, b) => b.odd - a.odd);
   return { lines: out, miss };
