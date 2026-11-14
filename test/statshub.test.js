@@ -61,3 +61,19 @@ test('perfil do jogador: temporada, casa/fora e histórico do caçador', () => {
   assert.ok(p.hx.length <= 20 && p.hx[0].length === 11);
   assert.equal(p.ss.hm.n + p.ss.aw.n, p.ss.ns);
 });
+import { multiplas, combinados, maiorChance, pdfHTML } from '../scripts/pdf.mjs';
+test('PDF do dia: múltiplas uma perna por jogo, combinados no mesmo jogo, maior chance, aviso de odd antiga', () => {
+  const fut = new Date(Date.now() + 36e5).toISOString();
+  const R = (id, g, m, p, d, extra = {}) => ({ id, n: 'J' + id, t: 'T' + g, o: 'O' + g, home: true, g, k: 'p', st: 'xi', m, l: 0.5, p, d, b: d ? 'Casa' : null, e: d ? p * d - 1 : null, gr: 'A', nt: 70, utc: fut, ...extra });
+  const rows = [R('1', 1, 'SH', .72, 1.5), R('2', 1, 'FC', .7, 1.55), R('3', 2, 'TK', .74, 1.45), R('4', 3, 'SH', .66, 1.6), R('5', 3, 'SOT', .6, null)];
+  const M = multiplas(rows);
+  assert.equal(M.tripla.legs.length, 3);
+  assert.equal(new Set(M.tripla.legs.map(r => r.g)).size, 3);           // uma perna por jogo
+  assert.ok(Math.abs(M.dupla.odd - 1.5 * 1.45) < 1e-9);
+  const C = combinados(rows);
+  assert.ok(C.length >= 1 && C.every(c => c.a.g === c.b.g && c.a.id !== c.b.id));
+  const mc = maiorChance(rows);
+  assert.equal(mc.SOT[0].id, '5');                                        // sem casa: linha de referência
+  const html = pdfHTML({ date: '2026-11-14', gen: new Date().toISOString(), games: [{}], rows, rowsU: [], houses: [{ house: 'Farra', at: new Date(Date.now() - 3 * 3600e3).toISOString(), n: 10 }] }, null);
+  assert.ok(html.includes('Leitura das odds com 2 h ou mais'));
+});

@@ -83,6 +83,10 @@ jobs:
           npm i --no-save --no-audit --no-fund playwright@1.48.2
           npx playwright install --with-deps chromium
           node scripts/cards.mjs public
+      - name: Gerar o PDF do dia
+        continue-on-error: true
+        timeout-minutes: 5
+        run: node scripts/pdf.mjs public
       - uses: actions/upload-pages-artifact@v3
         with: { path: public }
       - id: deploy

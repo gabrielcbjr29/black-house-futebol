@@ -441,6 +441,8 @@ async function pushDaily(force = false, lead = 0) {
       if (r.ok) sent++;
       await new Promise(res => setTimeout(res, 60));
     }
+    // 📄 PDF do dia junto do resumo
+    if (await sendPDF(s.chat_id, d)) sent++;
   }
   await sb('bot_config?on_conflict=key', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ key: flag, value: String(sent), updated_at: new Date().toISOString() }) }).catch(() => null);
   return { ok: true, date: d.date, inscritos: subs.length, mensagens: sent, top_gravado: gravados, estrategias: et?.regs.length ?? 0 };
@@ -1079,6 +1081,7 @@ const HELP = `<b>📖 COMANDOS</b>
 /cacador · caçador de props (filtros prontos ou o seu)
 /sequencias · quem vem batendo uma linha há 5+ jogos
 /tendencia · método Tendência (sequência + confronto + defesa + odd)
+/pdf · PDF do dia (entradas, maior chance, combinados, múltiplas)
 /arbitros · árbitros do dia: faltas, cartões e rigor
 
 <b>Rodada</b>
@@ -1130,7 +1133,7 @@ const HOJE = { inline_keyboard: [
   [BTN('🎯 Top 10 Chutes', '/topchutes'), BTN('🧱 Top 10 Faltas', '/topfaltas')],
   [BTN('🗓️ Jogos', '/jogos'), BTN('🚑 Desfalques', '/desfalques'), BTN('📋 Resumo', '/resumo')],
   [BTN('🕵️ Caçador', '/cacador'), BTN('🔥 Sequências', '/sequencias'), BTN('🟨 Árbitros', '/arbitros')],
-  [BTN('📈 Tendência', '/tendencia'), BTN('🧪 Placar', '/estrategias')],
+  [BTN('📈 Tendência', '/tendencia'), BTN('🧪 Placar', '/estrategias'), BTN('📄 PDF', '/pdf')],
   [BTN('🖼️ Cards do dia', '/cards'), BTN('🎟️ Múltipla', '/multipla 3')], [BTN('☰ Todos os mercados', '/menu')]] };
 const MODELO_HUB = { inline_keyboard: [
   [BTN('🎯 Top 10 Chutes', '/topchutes'), BTN('🧱 Top 10 Faltas', '/topfaltas')],
@@ -1222,6 +1225,15 @@ async function sendCard(chatId: number, key: string) {
   const res = await TG('sendPhoto', { chat_id: chatId, photo: cardUrl(d, r), caption: cap, parse_mode: 'HTML', reply_markup: { inline_keyboard: [HOME] } });
   if (!res.ok) await TG('sendMessage', { chat_id: chatId, text: card(d, r, 1) + '\n' + FOOT, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: { inline_keyboard: [HOME] } });
 }
+// 📄 PDF do dia (gerado pela coleta): entradas do método, maior chance por mercado, combinados, múltiplas e hora das odds
+async function sendPDF(chatId: number, d?: Data) {
+  d ??= await data().catch(() => undefined);
+  if (!d) return false;
+  const stale = (d.houses ?? []).some(h => Date.now() - Date.parse(h.at) >= 2 * 3600e3);
+  const r = await TG('sendDocument', { chat_id: chatId, document: `${APP_URL}data/dia.pdf?v=${encodeURIComponent(d.gen)}`, parse_mode: 'HTML',
+    caption: `📄 <b>PDF do dia</b> · ${dateBR(d.date)} · ${d.games.length} jogos\n<i>Entradas do método, maior chance por mercado, combinados e múltiplas. Odds lidas: ${(d.houses ?? []).map(h => `${esc(h.house)} ${hourBR(h.at)}`).join(', ') || 'nenhuma casa'}${stale ? ' ⏱️ (2 h+, confira)' : ''}.</i>`, disable_notification: quiet() }).catch(() => null);
+  return !!r?.ok;
+}
 async function sendCards(chatId: number, arg?: string) {
   const d = await data().catch(() => null);
   if (!d) { await TG('sendMessage', { chat_id: chatId, text: 'Não consegui ler os dados agora. Tente de novo em instantes.' }); return; }
@@ -1292,6 +1304,7 @@ async function handle(update: any) {
   }
   const im = /^i:(.+)$/.exec(text);
   if (im) { if (cq) await TG('answerCallbackQuery', { callback_query_id: cq.id }); await sendCard(chatId, im[1]); return; }
+  if (/^\/pdf(@\S+)?(\s|$)/i.test(text)) { if (cq) await TG('answerCallbackQuery', { callback_query_id: cq.id }); if (!(await sendPDF(chatId))) await TG('sendMessage', { chat_id: chatId, text: 'O PDF do dia ainda não foi gerado. Tente de novo depois da próxima coleta (aos :20 e :50).' }); return; }
   if (/^\/cards(@\S+)?(\s|$)/i.test(text)) { if (cq) await TG('answerCallbackQuery', { callback_query_id: cq.id }); await sendCards(chatId, text.split(/\s+/)[1]); return; }
   let page = 1;
   const pm = /^([prx]):(\d+):(.+)$/.exec(text); let refreshed = false;
@@ -1338,7 +1351,7 @@ Deno.serve(async (req: Request) => {
       ['top', 'Melhores do dia (ex.: /top 20)'], ['valor', 'Valor com odd de casa'], ['seguras', 'Chance de 65% ou mais'], ['chutes', 'Chutes'], ['nogol', 'Chutes ao gol'], ['primeiro', 'Chutes no 1º tempo'],
       ['faltas', 'Faltas cometidas'], ['sofridas', 'Faltas sofridas'], ['desarmes', 'Desarmes'], ['defesas', 'Defesas do goleiro'], ['times', 'Mercados de time'], ['totais', 'Totais do jogo'],
       ['jogo', 'Linhas de um jogo'], ['jogador', 'Linhas de um jogador'], ['cacador', 'Caçador de props (filtros)'], ['tendencia', 'Método Tendência'], ['sequencias', 'Sequências de 5+ jogos'], ['arbitros', 'Árbitros do dia'], ['multipla', 'Múltipla (ex.: /multipla 3)'], ['jogos', 'Jogos de hoje'], ['desfalques', 'Desfalques'], ['resumo', 'Resumo da rodada'],
-      ['cards', 'Melhores do dia em imagem'], ['modelo', 'Modelo BH: chance de qualquer linha'], ['testes', 'Testes do Modelo BH'], ['topchutes', 'Top 10 do modelo em chutes'], ['topfaltas', 'Top 10 em faltas e desarmes'],
+      ['cards', 'Melhores do dia em imagem'], ['pdf', 'PDF do dia'], ['modelo', 'Modelo BH: chance de qualquer linha'], ['testes', 'Testes do Modelo BH'], ['topchutes', 'Top 10 do modelo em chutes'], ['topfaltas', 'Top 10 em faltas e desarmes'],
       ['receber', 'Receber os tops todo dia'], ['banca', 'Entradas registradas, lucro e ROI'], ['ontem', 'Resultado de ontem'], ['estrategias', 'Modelo por mercado: placar e entradas'], ['gabarito', 'Gabarito de ontem por mercado'],
       ['hoje', 'Listas de hoje'], ['ajuda', 'Todos os comandos'], ['app', 'Abrir o app']].map(([command, description]) => ({ command, description })) });
     const me = await TG('getMe', {}), info = await TG('getWebhookInfo', {});
