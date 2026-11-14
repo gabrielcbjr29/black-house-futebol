@@ -130,6 +130,9 @@ export function playerProfiles(fixtures, priors, { half = 15, maxN = 38, teamN =
       p90: Object.fromEntries(STATS.map(k => [k, min90 >= 2 ? r3(season.reduce((a, x) => a + x.p[P[k]], 0) / min90) : null])),
       hm: { n: starts.filter(isHome).length, ...Object.fromEntries(STATS.map(k => [k, avg(starts.filter(isHome), k)])) },
       aw: { n: starts.filter(x => !isHome(x)).length, ...Object.fromEntries(STATS.map(k => [k, avg(starts.filter(x => !isHome(x)), k)])) } };
+    // temporada passada (como titular 60+ min)
+    const prevS = played.find(x => x.f.s < curS)?.f.s, pst = prevS ? played.filter(x => x.f.s === prevS && x.p[P.start] && x.p[P.min] >= 60) : [];
+    ss.pv = prevS ? { s: prevS, ns: pst.length, st: Object.fromEntries(STATS.map(k => [k, avg(pst, k)])) } : null;
     // últimos 20 jogos em que entrou, para o Caçador: [min, titular, casa, liga, chutes, no gol, f.com., f.sofr., desarmes, defesas, adversário]
     const hx = played.slice(0, 20).map(x => [x.p[P.min], x.p[P.start], isHome(x) ? 1 : 0, x.f.lg, x.p[P.sh], x.p[P.sot], x.p[P.fc], x.p[P.fs], x.p[P.tk], x.p[P.sv], isHome(x) ? x.f.a : x.f.h]);
     out[pid] = { ss, hx,

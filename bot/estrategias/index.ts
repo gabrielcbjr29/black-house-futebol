@@ -53,6 +53,8 @@ export function fmtEntries(list: any[]) {
   });
   return { blocks, regs, n: i };
 }
+// madrugada (0h–8h de Brasília): mensagens chegam sem som
+const quiet = () => +new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23' }).format(new Date()) < 8;
 async function send(text: string, kb: unknown, all = false) {
   const token = await cfg('TELEGRAM_BOT_TOKEN'); if (!token) return 0;
   // all: quem recebe as estratégias ou os tops (alerta de escalação)
@@ -60,13 +62,21 @@ async function send(text: string, kb: unknown, all = false) {
   let sent = 0;
   for (const s of subs) {
     const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: s.chat_id, text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: kb }) }).then(r => r.json()).catch(() => null);
+      body: JSON.stringify({ chat_id: s.chat_id, text, parse_mode: 'HTML', disable_web_page_preview: true, disable_notification: quiet(), reply_markup: kb }) }).then(r => r.json()).catch(() => null);
     if (r?.ok) sent++;
   }
   return sent;
 }
 async function alert(fresh: any[], evMin: number) {
   if (!fresh.length) return 0;
+  // uma mensagem por entrada, com card e análise completa: quem monta é o bot (ele tem o bot.json e o card)
+  try {
+    const secret = await cfg('WEBHOOK_SECRET');
+    const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/telegram-bot?alertas=${secret}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entries: fresh }) }).then(r => r.json());
+    if (r?.ok) return r.mensagens ?? 0;
+    console.error('alerta pelo bot falhou', r);
+  } catch (e) { console.error('alerta pelo bot falhou', e); }
+  // reserva: mensagem agrupada (formato antigo)
   const { blocks, regs, n } = fmtEntries(fresh);
   const fases = [...new Set(fresh.map(x => FASE[x.fase] ?? ''))].filter(Boolean).join(' / ');
   let text = `🚨 <b>${n > 1 ? 'NOVAS ENTRADAS' : 'NOVA ENTRADA'} · MODELO BH ⚽</b>\n<i>Melhor odd entre as casas agora · EV mínimo ${Math.round(evMin * 100)}% · 1u cada${fases ? ' · ' + fases : ''}</i>\n\n${blocks.join('\n\n')}\n\n🟩 bateu · 🟥 não bateu nos últimos 10 como titular (mais recente primeiro)\n📝 <i>Toque no número para registrar a sua aposta. Quanto antes, melhor: a linha costuma andar até o jogo.</i>\n${FOOT}`;
@@ -192,6 +202,19 @@ async function risco(bot: any) {
       else if (m?.st === 'banco') conds['banco'] = `${esc(x.name)} começa no <b>BANCO</b> na escalação oficial${/1/.test(x.mk) ? ' (no 1º tempo, quase sem chance)' : ''}`;
       else if (m?.st === 'duvida') conds['duvida'] = `${esc(x.name)} está <b>em dúvida</b> para o jogo`;
       if (m?.st === 'xi') conds['xi'] = ''; // titular confirmado: registra sem alertar
+    }
+    // titular importante do time caiu (fora da escalação, no banco ou em dúvida): muda o volume do time e do jogador
+    const T = bot.mdl?.t?.[String(x.gid)];
+    if (T?.reg) {
+      const tid = isP ? m?.t : x.pid.startsWith('t') ? +x.pid.slice(1).split('-')[0] : null;
+      const sides = x.pid.startsWith('j') ? ['h', 'a'] : tid == null ? [] : [String(tid) === String(T.h) ? 'h' : 'a'];
+      for (const sd of sides) for (const [rid, rn] of T.reg[sd] ?? []) {
+        if (rid === x.pid) continue;
+        const rm = bot.mdl?.p?.[rid], tn = sd === 'h' ? T.hn : T.an;
+        if (g?.fase === 'escalacao' && !rm) conds['tit:' + rid] = `Titular importante fora: <b>${esc(rn)}</b> (${esc(tn)}) não está na escalação`;
+        else if (rm?.st === 'banco') conds['tit:' + rid] = `Titular importante no banco: <b>${esc(rn)}</b> (${esc(tn)})`;
+        else if (rm?.st === 'duvida') conds['titd:' + rid] = `Titular importante em dúvida: <b>${esc(rn)}</b> (${esc(tn)})`;
+      }
     }
     const pn0 = pNow(bot, x, L), pn = pn0 == null ? null : x.side === 'u' ? 1 - pn0 : pn0;
     if (pn != null) {

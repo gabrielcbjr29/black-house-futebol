@@ -17,7 +17,7 @@ const pct = x => Math.round(x * 100) + '%';
 const hit = h => h?.[1] ? `${h[0]}/${h[1]}` : '–';
 const font = f => readFileSync(join(ROOT, 'fonts', f)).toString('base64');
 const hourBR = iso => new Date(iso).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
-export const cardKey = r => `${r.id}-${r.m}-${String(r.l).replace('.', '_')}`;
+export const cardKey = r => `${r.id}-${r.m}-${String(r.l).replace('.', '_')}${r.s === 'u' ? '-u' : ''}`;
 // escudo genérico: iniciais do time sobre uma cor derivada do nome (sem escudos oficiais)
 const initials = t => { const w = String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z ]/g, ' ').split(/\s+/).filter(x => x.length > 2 && !/^(FC|CF|AFC|SC|AC|SSC|Club|Real|Clube)$/i.test(x)); return (w.length >= 2 ? w[0][0] + w[1][0] + (w[2]?.[0] ?? '') : (w[0] ?? t).slice(0, 3)).toUpperCase(); };
 const hue = t => { let h = 0; for (const c of String(t)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
@@ -120,7 +120,7 @@ export function cardHTML(r, date) {
   <div class="who"><div class="badge" style="--h:${hue(r.t)}">${esc(initials(r.t))}</div>
     <div><div class="name">${esc(r.n)}</div><div class="sub">${esc(POS[r.pos] || '')}${r.pos ? ' · ' : ''}${esc(r.t)}</div><div class="sub">${esc(vs)} · ${hourBR(r.utc)} · ${esc(LG[r.lg] || '')}</div>${st ? `<div class="sub">${st}</div>` : ''}</div>
     <div class="grade"><div class="g g${r.gr === 'A+' ? 'Ap' : r.gr}">${esc(r.gr)}</div><small>NOTA ${r.nt ?? '–'}</small></div></div>
-  <div class="line"><span class="side o">MAIS DE</span><span class="ln">${n1(r.l)}</span><span class="mk">${esc(MK[r.m] || r.m)}</span></div>
+  <div class="line"><span class="side ${r.s === 'u' ? 'u">MENOS DE' : 'o">MAIS DE'}</span><span class="ln">${n1(r.l)}</span><span class="mk">${esc(MK[r.m] || r.m)}</span></div>
   <div class="kpis">${odd}<div class="k gr"><small>CHANCE</small><b>${pct(r.p)}</b><span>modelo</span></div>
     <div class="k"><small>MODELO BH</small><b>${n1(Math.round(r.pj * 10) / 10)}</b><span>linha ${n1(r.l)}</span></div>
     <div class="k"><small>EV</small><b>${r.e == null ? '–' : (r.e >= 0 ? '+' : '') + (r.e * 100).toFixed(1).replace('.', ',') + '%'}</b><span>${r.e == null ? 'falta odd' : 'valor esperado'}</span></div></div>
@@ -134,7 +134,11 @@ export function cardHTML(r, date) {
 
 export async function renderCards(root = ROOT) {
   const bot = JSON.parse(readFileSync(join(root, 'data', 'bot.json'), 'utf8'));
-  const rows = bot.rows.filter(r => r.cd);
+  // as melhores do dia (cd=1) e toda entrada de estratégia (o alerta manda a imagem no topo)
+  let picks = [];
+  try { picks = JSON.parse(readFileSync(join(root, 'data', 'strategies.json'), 'utf8')).picks ?? []; } catch { /* sem estratégias */ }
+  const all = [...bot.rows, ...(bot.rowsU ?? [])], want = new Set(picks.map(p => `${p.pid}|${p.mk}|${+p.line}|${p.side ?? 'o'}`));
+  const rows = [...new Map(all.filter(r => r.cd || want.has(`${r.id}|${r.m}|${r.l}|${r.s ?? 'o'}`)).map(r => [cardKey(r), r])).values()];
   const out = join(root, 'data', 'cards');
   rmSync(out, { recursive: true, force: true }); mkdirSync(out, { recursive: true });
   const { chromium } = createRequire(import.meta.url)('playwright');

@@ -1,4 +1,4 @@
-# Relógio da coleta: dispara "Atualizar dados e publicar" aos :20 e :50 (Brasília, das 6h às 23h50).
+# Relógio da coleta: dispara "Atualizar dados e publicar" aos :20 e :50, 24 horas por dia.
 # O agendamento próprio do GitHub atrasa ou pula horários; este job espera o próximo horário, dispara a coleta e se
 # dispara de novo. O schedule abaixo só religa a corrente se ela parar; com cancel-in-progress, fica um relógio só.
 name: Relógio da coleta
@@ -30,12 +30,8 @@ jobs:
           if [ $m -lt 20 ]; then t=20; elif [ $m -lt 50 ]; then t=50; else t=80; fi
           wait=$(( (t - m) * 60 - s )); if [ $wait -lt 30 ]; then wait=$((wait + 1800)); fi
           echo "esperando $wait s"; sleep $wait
-          h=$((10#$(TZ=America/Sao_Paulo date +%H)))
-          if [ $h -ge 6 ]; then
-            gh api -X POST "repos/$REPO/actions/workflows/atualizar.yml/dispatches" -f ref=main && echo "coleta disparada às $(TZ=America/Sao_Paulo date +%H:%M)"
-          else
-            echo "fora do horário ($h h em Brasília)"
-          fi
+          # 24 horas: as linhas abrem de madrugada e os alertas da madrugada chegam sem som
+          gh api -X POST "repos/$REPO/actions/workflows/atualizar.yml/dispatches" -f ref=main && echo "coleta disparada às $(TZ=America/Sao_Paulo date +%H:%M)"
       - name: Agenda o próximo relógio
         if: ${{ !cancelled() }}
         env:

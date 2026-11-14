@@ -35,7 +35,10 @@ export function buildModel(games, H, prof = buildProfiles(H), injuries = {}) {
     const h2h = (fxOf[g.home.id] ?? []).filter(f => (f.h === g.home.id && f.a === g.away.id) || (f.h === g.away.id && f.a === g.home.id)).filter(f => f.t?.[f.h] && f.t?.[f.a]).slice(0, 6)
       .map(f => { const a = f.t[g.home.id], b = f.t[g.away.id]; return [f.d.slice(0, 10), a[TI.sh], a[TI.sot], a[TI.fc], b[TI.sh], b[TI.sot], b[TI.fc]]; });
     teams[g.id] = { lg: g.lg, h: g.home.id, a: g.away.id, hn: g.home.name, an: g.away.name, ref: g.ref || null, rf: ref, pj: { h: rnd(pj.h), a: rnd(pj.a) },
-      n: [th.n, ta.n], last: { h: th.last, a: ta.last }, h2h, def: { h: DEF[g.home.id] ?? null, a: DEF[g.away.id] ?? null } };
+      n: [th.n, ta.n], last: { h: th.last, a: ta.last }, h2h, def: { h: DEF[g.home.id] ?? null, a: DEF[g.away.id] ?? null },
+      // titulares importantes: os 5 com mais titularidade × minutos no elenco recente (o monitor avisa se um deles cair)
+      reg: Object.fromEntries([['h', g.home.id], ['a', g.away.id]].map(([s, tid]) => [s, (squads[tid] ?? []).map(pid => [pid, PP[pid]]).filter(([, p]) => p && p.ps >= 0.8)
+        .sort((a, b) => b[1].ps * b[1].ms - a[1].ps * a[1].ms).slice(0, 5).map(([pid]) => [pid, H.players[pid] ?? pid])])) };
     for (const [side, team, opp, mine, theirs, tp] of [['h', g.home, g.away, pj.h, pj.a, th], ['a', g.away, g.home, pj.a, pj.h, ta]]) {
       const tAvg = teamAvg(tp, lgOf(LP, tp.lg ?? g.lg));
       const ctx = playerContext(mine, theirs, tAvg);

@@ -68,6 +68,7 @@ export function buildBotData(slate, lines = new Map(), { houses = [] } = {}) {
       // números extras do card: por 90 e média como titular na temporada, casa × fora, quanto o adversário cede
       const st = M.st, ss = P.ss, oc = OPP_COL[st], ol = T0[g.id]?.last?.[P.home ? 'a' : 'h'] ?? [];
       const ex = ss ? { p90: ss.p90?.[st] ?? null, sa: ss.st?.[st] ?? null, ns: ss.ns, hm: ss.hm?.[st] ?? null, nh: ss.hm?.n ?? 0, aw: ss.aw?.[st] ?? null, na: ss.aw?.n ?? 0,
+        pa: ss.pv?.ns >= 3 ? ss.pv.st?.[st] ?? null : null, np: ss.pv?.ns ?? 0,
         oa: oc != null ? avgOf(ol.map(x => x[oc])) : null, op: P.op?.[st] ?? null } : undefined;
       // Tendência: últimos 20 jogos como titular (60+ min), jogos contra o adversário e defesa dele contra a posição
       const v20 = M.h1 ? [] : (P.hx ?? []).filter(h => h[1] && h[0] >= 60).map(h => h[HXI[st]]);
@@ -120,7 +121,7 @@ export function buildBotData(slate, lines = new Map(), { houses = [] } = {}) {
       return [pid, { n: P.n, t: P.t, tn: mine?.name, on: opp?.name, home: P.home, g: P.g, lg: g?.lg, utc: g?.utc, pos: P.pos, ps: P.ps, pb: P.pb, st: P.st, ms: P.ms, gap: P.gap ?? 0, mu: P.mu,
         sq: Object.fromEntries(['sh', 'sot', 'fc', 'fs', 'tk', 'sv'].map(k => [k, starts(P.sq, k)])) }];
     })),
-    t: Object.fromEntries(Object.entries(slate.model.teams).map(([gid, T]) => [gid, { h: T.h, a: T.a, hn: T.hn, an: T.an, pj: T.pj, ref: T.ref, rf: T.rf }])),
+    t: Object.fromEntries(Object.entries(slate.model.teams).map(([gid, T]) => [gid, { h: T.h, a: T.a, hn: T.hn, an: T.an, pj: T.pj, ref: T.ref, rf: T.rf, reg: T.reg }])),
   };
   // cards em imagem: as melhores do dia (uma por jogador, odds 1,40–3,50)
   const seen = new Set(); let nc = 0;

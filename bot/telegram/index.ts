@@ -38,7 +38,7 @@ const TG = async (m: string, body: unknown) => { const c = await cfg(); return f
 type Row = { id: string; n: string; t: string; o: string; home: boolean; g: number; lg: number; utc: string; fase: string; k: 'p' | 't' | 'j'; pos?: string; ps?: number; st?: string; ms?: number;
   m: string; s: 'o' | 'u'; l: number; p: number; d: number | null; b: string | null; of?: [string, number][]; e: number | null; pj: number; ps1?: number; sq?: number[]; jh?: number[]; ja?: number[];
   hit: [number, number] | null; h5: [number, number] | null; sk?: number; cx?: number; nt: number; gr: string; ref?: 1; cd?: 1; td?: any;
-  ex?: { p90?: number | null; sa?: number | null; ns?: number; hm?: number | null; nh?: number; aw?: number | null; na?: number; oa?: number | null; op?: number | null } };
+  ex?: { p90?: number | null; sa?: number | null; ns?: number; hm?: number | null; nh?: number; aw?: number | null; na?: number; oa?: number | null; op?: number | null; pa?: number | null; np?: number } };
 type MPlayer = { n: string; t: number; tn: string; on: string; home: boolean; g: number; lg?: number; gap?: number; utc: string; pos: string; ps: number; pb: number; st: string; ms: number; mu: Record<string, [number, number]>; sq: Record<string, number[]> };
 type Game = { id: number; lg: number; utc: string; st: string; h: string; a: string; hid: number; aid: number; fase: string; ref: string | null };
 type Data = { date: string; gen: string; demo?: boolean; games: Game[]; rows: Row[]; inj: { g: number; n: string; t: string; st: string; why: string }[];
@@ -103,7 +103,7 @@ const inRange = (r: Row) => { const o = oddOf(r); return o >= ODD_MIN - 1e-9 && 
 const RANGE_TXT = ' · odds 1,40–3,50';
 const keyOf = (r: Row) => `${r.id}|${r.m}|${r.l}${r.s === 'u' ? '|u' : ''}`;
 const sideTx = (s?: string) => s === 'u' ? '⬇️ Menos' : '⬆️ Mais';
-const cardUrl = (d: Data, r: Row) => `${APP_URL}data/cards/${encodeURIComponent(`${r.id}-${r.m}-${String(r.l).replace('.', '_')}`)}.jpg?v=${encodeURIComponent(d.gen)}`;
+const cardUrl = (d: Data, r: Row) => `${APP_URL}data/cards/${encodeURIComponent(`${r.id}-${r.m}-${String(r.l).replace('.', '_')}${r.s === 'u' ? '-u' : ''}`)}.jpg?v=${encodeURIComponent(d.gen)}`;
 const hitTxt = (h?: [number, number] | null) => h?.[1] ? `<b>${h[0]}/${h[1]}</b>` : '–';
 const u2 = (x: number) => (x >= 0 ? '+' : '') + x.toFixed(2).replace('.', ',') + 'u';
 const pctS = (x: number) => (x >= 0 ? '+' : '') + (x * 100).toFixed(1).replace('.', ',') + '%';
@@ -116,12 +116,12 @@ const whoB = (r: Row, i?: number) => `<b>${i != null ? i + '. ' : ''}${r.k === '
 const STL = (r: { st?: string; ps?: number }) => r.st === 'xi' ? '✅ titular confirmado' : r.st === 'banco' ? '🪑 no banco' : r.st === 'duvida' ? '🟡 em dúvida' : r.st === 'provavel' ? `🕐 provável titular (${pc(r.ps ?? 0)})` : '';
 // sequência dos últimos 10 (mais recente primeiro): 🟩 bateu (mais que a linha), 🟥 não bateu
 const seq = (r: Row) => r.sq?.length ? r.sq.join('-') : '';
-function sqDots(vals: number[] | null | undefined, line: number, n = 10) {
+function sqDots(vals: number[] | null | undefined, line: number, n = 10, u = false) {
   const v = (vals ?? []).slice(0, n).map(Number); if (!v.length) return { dots: '', hit: 0, n: 0 };
-  let hit = 0; const dots = v.map(x => { const ok = x > line; if (ok) hit++; return ok ? '🟩' : '🟥'; }).join('');
+  let hit = 0; const dots = v.map(x => { const ok = u ? x < line : x > line; if (ok) hit++; return ok ? '🟩' : '🟥'; }).join('');
   return { dots, hit, n: v.length };
 }
-const sqLine = (vals: number[] | null | undefined, line: number) => { const q = sqDots(vals, line); return q.n ? `${q.dots} <b>${q.hit}/${q.n}</b>` : ''; };
+const sqLine = (vals: number[] | null | undefined, line: number, u = false) => { const q = sqDots(vals, line, 10, u); return q.n ? `${q.dots} <b>${q.hit}/${q.n}</b>` : ''; };
 // contexto do jogo para a estatística do jogador (quanto o jogo de hoje foge da média dele)
 function ctxTxt(r: Row) {
   if (r.k !== 'p' || r.cx == null || Math.abs(r.cx - 1) < 0.03) return '';
@@ -161,21 +161,21 @@ const rigor = (f: number) => f >= 1.07 ? '🔴 <b>rigoroso</b>' : f <= 0.93 ? '�
 function hitsTxt(r: Row) {
   if (r.k === 'j') return r.jh?.length ? `📊 Total nos últimos 5 · ${esc(r.t)}: <b>${r.jh.slice(0, 5).join('-')}</b> · ${esc(r.o)}: <b>${(r.ja ?? []).slice(0, 5).join('-')}</b>` : '';
   if (/1$/.test(r.m)) return '📊 <i>1º tempo: sem histórico por jogador; a chance usa a fatia do 1º tempo da liga</i>';
-  return `📊 L5 ${hitTxt(r.h5)} · L10 ${hitTxt(r.hit)}${r.k === 'p' ? ' <i>como titular</i>' : ''}${seq(r) ? `\n${sqLine(r.sq, r.l)} · <i>${seq(r)}</i>` : ''}`;
+  return `📊 L5 ${hitTxt(r.h5)} · L10 ${hitTxt(r.hit)}${r.k === 'p' ? ' <i>como titular</i>' : ''}${seq(r) ? `\n${sqLine(r.sq, r.l, r.s === 'u')} · <i>${seq(r)}</i>` : ''}`;
 }
 const oddTxt = (r: Row) => r.d ? `💵 <code>@${n2(r.d)}</code> ${esc(r.b ?? '')}${r.of && r.of.length > 1 ? ` <i>(+${r.of.length - 1} casa${r.of.length > 2 ? 's' : ''})</i>` : ''}` : `💵 odd justa <code>@${n2(1 / r.p)}</code> <i>(sem casa)</i>`;
 const evTxt = (r: Row) => r.e == null ? '' : ` · EV <b>${r.e >= 0 ? '+' : ''}${(r.e * 100).toFixed(1).replace('.', ',')}%</b>`;
 // cartão das listas
 function listCard(r: Row, i: number) {
   return `<blockquote>${whoB(r, i)}  <i>${esc(vsTxt(r))} · ${hourBR(r.utc)}</i>
-⬆️ <b>Mais de ${n1(r.l)}</b> ${MK[r.m] ?? r.m}
+${r.s === 'u' ? '⬇️ <b>Menos' : '⬆️ <b>Mais'} de ${n1(r.l)}</b> ${MK[r.m] ?? r.m}
 ${GRADE[r.gr] ?? r.gr} · Nota <b>${r.nt}</b>  ${bar(r.p)} <b>${pc(r.p)}</b>
 ${oddTxt(r)}${evTxt(r)}
 ${hitsTxt(r)}
 🧠 Modelo BH: <b>${n1(r.pj)}</b>${r.k === 'p' && r.st ? ' · ' + STL(r) : ''}${ctxTxt(r)}</blockquote>`;
 }
 // análise completa (🔎)
-function card(d: Data, r: Row, i: number) {
+function card(d: Data, r: Row, i?: number, opt: { td?: boolean } = {}) {
   const T = d.mdl.t[String(r.g)];
   const R = T?.ref ? d.refs?.[T.ref] : null;
   const ref = (r.m === 'FC' || r.m === 'FS' || r.m === 'TFC' || r.m === 'JFC') && T?.ref ? `\n🟨 Árbitro: ${esc(refName(T.ref))}${R ? ` · <b>${n1(R.fpg)}</b> faltas/jogo (liga ${n1(R.lfpg)}) · ${n1(R.cpg)} cartões · ${rigor(R.f)}` : T.rf && Math.abs(T.rf - 1) >= 0.03 ? ` · <b>${pctS(T.rf - 1)}</b> faltas por jogo que a média` : ''}` : '';
@@ -188,18 +188,18 @@ function card(d: Data, r: Row, i: number) {
   if (r.hit && r.hit[1] >= 5 && r.hit[0] / r.hit[1] >= .7) wy.push(`✅ Bateu em ${r.hit[0]} dos últimos ${r.hit[1]}${r.k === 'p' ? ' como titular' : ' jogos'}`);
   if (r.cx != null && r.cx >= 1.08) wy.push('✅ Adversário favorece essa estatística');
   if (r.st === 'xi') wy.push('✅ Titular confirmado na escalação oficial');
-  if (r.e != null && r.e >= .05) wy.push(`✅ Valor na odd da casa (EV ${evS(r.e)})`);
+  if (!opt.td && r.e != null && r.e >= .05) wy.push(`✅ Valor na odd da casa (EV ${evS(r.e)})`);
   if (r.st === 'provavel') wn.push('⚠️ Escalação ainda não saiu: confira antes de entrar');
   if (r.st === 'duvida') wn.push('🟡 <i>Jogador em dúvida</i>');
   if (r.st === 'banco') wn.push('⚠️ Começa no banco');
   if (r.hit && r.hit[1] >= 5 && r.hit[0] / r.hit[1] < .4) wn.push(`⚠️ Bateu só ${r.hit[0]} dos últimos ${r.hit[1]}`);
   if (r.cx != null && r.cx <= 0.92) wn.push('⚠️ Adversário dificulta essa estatística');
-  if (r.e != null && r.e > .15) wn.push('⚠️ <i>Muito acima do mercado: confira notícias</i>');
+  if (!opt.td && r.e != null && r.e > .15) wn.push('⚠️ <i>Muito acima do mercado: confira notícias</i>');
   const why = [...wy.slice(0, 3), ...wn.slice(0, 3)];
   return `<blockquote>${whoB(r, i)}  <i>${LG[r.lg]?.[0] ?? ''} ${esc(vsTxt(r))} · ${hourBR(r.utc)}</i>
-⬆️ <b>Mais de ${n1(r.l)}</b> ${MK[r.m] ?? r.m}
+${r.s === 'u' ? '⬇️ <b>Menos' : '⬆️ <b>Mais'} de ${n1(r.l)}</b> ${MK[r.m] ?? r.m}
 ${GRADE[r.gr] ?? r.gr} · Nota <b>${r.nt}</b>  ${bar(r.p)} <b>${pc(r.p)}</b>
-${oddTxt(r)}${evTxt(r)}${casas}${refl}
+${oddTxt(r)}${opt.td ? ' · 📈 <i>sinal da sequência, não do modelo</i>' : evTxt(r)}${casas}${refl}
 ${hitsTxt(r)}
 🧠 Modelo BH <b>${n1(r.pj)}</b>${r.k === 'p' && r.st ? ' · ' + STL(r) : ''}${mins}${nums}${ctxTxt(r)}${ref}</blockquote>${why.length ? `\n<blockquote expandable><b>Por que sim / por que não</b>\n${why.join('\n')}</blockquote>` : ''}`;
 }
@@ -1012,6 +1012,51 @@ ${tdLines(r)}
     kb: { inline_keyboard: [...chunk(regs, 5), [BTN('🧪 Placar', '/estrategias tendencia')], HOME] } };
 }
 
+
+// ---------- 🚨 Alerta por entrada (chamado pela função das estratégias) ----------
+// Uma mensagem por entrada: card em imagem no topo e a análise completa embaixo, com Registrar e Copiar.
+// Madrugada (0h–8h de Brasília) chega sem som.
+const quiet = () => { const h = +new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23' }).format(new Date()); return h < 8; };
+function alertExtra(d: Data, r: Row, x: any) {
+  const out: string[] = [], t = r.td, u = r.s === 'u';
+  const td = x.strategy_id === 'tendencia';
+  if (td) out.push(`📈 A Tendência não usa o modelo: entrou por sequência, confronto, defesa e odd. Só para comparar, o modelo dá ${pc(r.p)}${r.e != null ? ` (EV ${evS(r.e)})` : ''}.`);
+  if (r.d) out.push(`🎯 Modelo <b>${pc(r.p)}</b> × mercado ${pc(1 / r.d)} <i>(chance que a odd ${n2(r.d)} paga)</i>`);
+  const parts: string[] = [];
+  if (t?.l20) parts.push(`L20 <b>${hTx(t.l20)}</b>`);
+  if (t?.vs) parts.push(t.vs[1] ? `contra o ${esc(r.k === 'j' ? 'mesmo adversário' : r.o)} <b>${t.vs[0]}/${t.vs[1]}</b>` : 'sem jogo contra o adversário');
+  if (r.ex?.pa != null) parts.push(`temporada passada <b>${n1(r.ex.pa)}</b> por jogo (${r.ex.np})`);
+  if (parts.length) out.push('📅 ' + parts.join(' · '));
+  if (t?.df && !t.both) out.push(`🛡️ ${esc(r.o)}: <b>${ORD(t.df[1])} de ${t.df[2]}</b> que mais cede ${r.k === 'p' ? `a ${POSN[r.pos ?? ''] ?? 'jogadores da posição'}` : 'por jogo'} na liga (${n1(t.df[0])}${r.k === 'p' ? ' por 90' : ''})`);
+  else if (t?.both && t.df?.[0] && t.df?.[1]) out.push(`🛡️ Total por jogo na liga: ${esc(r.t)} ${ORD(t.df[0][1])} de ${t.df[0][2]} · ${esc(r.o)} ${ORD(t.df[1][1])} de ${t.df[1][2]}`);
+  const g = d.games.find(G => G.id === r.g), inj = (d.inj ?? []).filter(p => g && (p.t === g.h || p.t === g.a));
+  if (inj.length) out.push(`🚑 Desfalques: ${inj.slice(0, 8).map(p => `${p.st === 'out' ? '🔴' : '🟡'} ${esc(p.n)} <i>(${esc(short(p.t, 12))})</i>`).join(', ')}${inj.length > 8 ? ` e mais ${inj.length - 8}` : ''}`);
+  if (u && r.sq?.length) out.push(`🔢 ${sqLine(r.sq, r.l, true)} <i>(🟩 ficou abaixo da linha)</i>`);
+  return out.length ? `\n<blockquote>${out.join('\n')}</blockquote>` : '';
+}
+async function alertas(entries: any[]) {
+  const d = await data(), subs: any[] = await sb('bot_subs?select=chat_id&est=eq.true') ?? [];
+  const names: Record<string, string> = Object.fromEntries(((await estToday(d.date))?.strategies ?? []).map((s: any) => [s.id, s.name]));
+  const all = [...d.rows, ...(d.rowsU ?? [])], silent = quiet();
+  let sent = 0, fotos = 0;
+  for (const x of entries) {
+    const r = all.find(R => R.id === x.pid && R.m === x.mk && R.l === +x.line && (R.s ?? 'o') === (x.side ?? 'o'));
+    if (!r) continue;
+    const td = x.strategy_id === 'tendencia';
+    const fire = !td && r.e != null && r.e >= .1 ? ' 🔥' : '';
+    const title = td ? `📈 <b>TENDÊNCIA · NOVA ENTRADA</b>` : `🚨 <b>NOVA ENTRADA${fire} · ${esc((names[x.strategy_id] ?? x.strategy_id).toUpperCase())}</b>`;
+    const text = `${title}\n<i>Linha e odd da melhor casa agora · 1u no papel${td ? '' : ' · EV mínimo 5%'}</i>\n${card(d, r, undefined, { td })}${alertExtra(d, r, x)}\n<i>📝 Registre a sua aposta com a odd que você pegou. Quanto antes, melhor: a linha costuma andar até o jogo.</i>\n${FOOT}`;
+    const kb = { inline_keyboard: [[BTN('📝 Registrar minha aposta', `bet:${keyOf(r)}:e.${x.strategy_id}`)], [{ text: '📋 Copiar', copy_text: { text: shareText(r).slice(0, 256) } }, BTN('🧪 Placar', '/estrategias')]] };
+    for (const s of subs) {
+      const ph = await TG('sendPhoto', { chat_id: s.chat_id, photo: cardUrl(d, r), disable_notification: silent }).catch(() => null);
+      if (ph?.ok) fotos++;
+      const m = await TG('sendMessage', { chat_id: s.chat_id, text: text.length > 4090 ? text.slice(0, 4000).replace(/<[^>]*$/, '') + '…' : text, parse_mode: 'HTML', disable_web_page_preview: true, disable_notification: silent, reply_markup: kb });
+      if (m?.ok) sent++;
+    }
+  }
+  return { ok: true, mensagens: sent, fotos, silencioso: silent };
+}
+
 const HELP = `<b>📖 COMANDOS</b>
 
 <b>Melhores do dia</b>
@@ -1294,6 +1339,13 @@ Deno.serve(async (req: Request) => {
       ['hoje', 'Listas de hoje'], ['ajuda', 'Todos os comandos'], ['app', 'Abrir o app']].map(([command, description]) => ({ command, description })) });
     const me = await TG('getMe', {}), info = await TG('getWebhookInfo', {});
     return json({ ok: !!hook.ok, webhook: hook, endereco: info.result?.url, erro_recente: info.result?.last_error_message ?? null, comandos: cmds.ok, bot: me.result?.username ? '@' + me.result.username : null });
+  }
+  // alertas das estratégias: POST ?alertas=<WEBHOOK_SECRET> { entries: [...] } (chamado pela função estrategias)
+  if (req.method === 'POST' && url.searchParams.get('alertas')) {
+    if (url.searchParams.get('alertas') !== SECRET) return new Response('forbidden', { status: 403 });
+    CACHE = null;
+    const body = await req.json().catch(() => null);
+    return json(await alertas(body?.entries ?? []).catch(e => ({ ok: false, erro: String(e) })));
   }
   if (req.headers.get('x-telegram-bot-api-secret-token') !== SECRET) return new Response('forbidden', { status: 403 });
   const update = await req.json().catch(() => null);
