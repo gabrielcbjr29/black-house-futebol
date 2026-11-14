@@ -592,7 +592,7 @@ async function resultadoCmd(chatId: number, rest: string[]): Promise<Out> {
 }
 
 // ---------- fábrica de estratégias ----------
-async function estrategiasCmd(rest: string[]): Promise<Out> {
+async function estrategiasCmd(rest: string[], chatId?: number): Promise<Out> {
   const id = rest.join('-').toLowerCase().replace(/[^a-z0-9-]/g, '');
   let stats: any[] = [], picks: any[] = [];
   try {
@@ -616,9 +616,19 @@ async function estrategiasCmd(rest: string[]): Promise<Out> {
     return { text: `<b>🧪 ${esc(S.name)}</b> <i>(${S.status})</i>\n<i>${esc(descr)}</i>\n<blockquote>Conferidas <b>${S.n}</b> · ✅ ${S.g} · ❌ ${S.r} · ➖ ${S.v}\nLucro <b>${u2(+S.lucro || 0)}</b> · ROI <b>${S.roi == null ? '–' : pctS(+S.roi)}</b> · odd média ${S.odd_media ? n2(+S.odd_media) : '–'}\nCLV médio ${S.clv_linha_media == null ? '–' : (S.clv_linha_media >= 0 ? '+' : '') + n1(+S.clv_linha_media)} · EV médio ${evS(S.edge_medio == null ? null : +S.edge_medio)}</blockquote>\n<b>Hoje</b>\n${mine.length ? mine.map((x, i) => pickLn(x, i + 1)).join('\n') : 'Nenhuma entrada hoje.'}\n<i>O placar é teste em papel (1u por entrada, na linha e odd do alerta).${regs.length ? ' 📝 registra a sua entrada real com a odd que você pegou.' : ''}</i>`,
       kb: { inline_keyboard: [...chunk(regs, 5), ...kb.inline_keyboard] } };
   }
-  const tab = stats.map(s => `${String(s.name).padEnd(18).slice(0, 18)} ${String(s.n ?? 0).padStart(3)} ${(s.n ? Math.round(s.g / s.n * 100) + '%' : '–').padStart(4)} ${u2(+s.lucro || 0).padStart(7)} ${s.clv_linha_media == null ? '   –' : ((s.clv_linha_media >= 0 ? '+' : '') + n1(+s.clv_linha_media)).padStart(4)}`).join('\n');
-  const hoje = stats.map(s => `${esc(s.name)}: <b>${picks.filter(x => x.strategy_id === s.id).length}</b>`).join(' · ');
-  return { text: `<b>🧪 MODELO POR MERCADO</b>\n<i>As melhores entradas do Modelo BH em cada mercado, na melhor linha e odd entre as casas lidas · registro automático, 1u por entrada</i>\n<pre>MERCADO             N  ACE   LUCRO  CLV\n${tab}</pre>\n<b>Entradas hoje</b>\n${hoje}\n\n<i>Um mercado só merece stake de verdade com 50+ entradas, ROI positivo e CLV positivo. CLV = quanto a linha andou a nosso favor até o jogo. Toque num mercado para ver as entradas de hoje.</i>`, kb };
+  const lineOf = (s: any) => `${String(s.name).padEnd(18).slice(0, 18)} ${String(s.n ?? 0).padStart(3)} ${(s.n ? Math.round(s.g / Math.max(1, s.g + s.r) * 100) + '%' : '–').padStart(4)} ${u2(+s.lucro || 0).padStart(7)} ${s.clv_linha_media == null ? '   –' : ((s.clv_linha_media >= 0 ? '+' : '') + n1(+s.clv_linha_media)).padStart(4)}`;
+  // três placares lado a lado: modelo por mercado, os métodos extras (Top 10 forte, Oportunidade forte, Tendência) e as suas apostas reais
+  const isMod = (s: any) => /^[mtj]-/.test(s.id), mod = stats.filter(isMod), ext = stats.filter(s => !isMod(s));
+  const sum = (arr: any[]) => { const n = arr.reduce((a, s) => a + (+s.n || 0), 0), g = arr.reduce((a, s) => a + (+s.g || 0), 0), r = arr.reduce((a, s) => a + (+s.r || 0), 0), l = arr.reduce((a, s) => a + (+s.lucro || 0), 0); return { name: 'TOTAL', n, g, r, lucro: l, clv_linha_media: null }; };
+  let mine = '';
+  if (chatId) {
+    const b: any[] = await sb(`bets?chat_id=eq.${chatId}&select=status,profit,stake`).catch(() => []) ?? [];
+    const done = b.filter(x => x.status === 'green' || x.status === 'red'), lu = done.reduce((a, x) => a + (+x.profit || 0), 0), st = done.reduce((a, x) => a + (+x.stake || 1), 0);
+    mine = `\n<b>💼 Minhas apostas reais</b> (registradas pelo 📝)\n<blockquote>Conferidas <b>${done.length}</b> · ✅ ${done.filter(x => x.status === 'green').length} · ❌ ${done.filter(x => x.status === 'red').length} · abertas ${b.filter(x => x.status === 'aberta' || x.status === 'pendente').length}\nLucro <b>${u2(lu)}</b> · ROI <b>${st ? pctS(lu / st) : '–'}</b></blockquote>`;
+  }
+  const hoje = stats.map(s => [s, picks.filter(x => x.strategy_id === s.id).length] as const).filter(([, n]) => n).map(([s, n]) => `${esc(s.name)}: <b>${n}</b>`).join(' · ') || 'nenhuma ainda';
+  const head = 'ESTRATÉGIA          N  ACE   LUCRO  CLV';
+  return { text: `<b>🧪 ESTRATÉGIAS NO PAPEL</b>\n<i>Registro automático, 1u por entrada, na linha e odd do alerta (melhor casa lida) · ACE = acerto sem as anuladas</i>\n\n<b>🧠 Modelo por mercado</b>\n<pre>${head}\n${mod.map(lineOf).join('\n')}\n${lineOf(sum(mod))}</pre>${ext.length ? `\n<b>⭐ Métodos extras</b>\n<pre>${head}\n${ext.map(lineOf).join('\n')}</pre>` : ''}${mine}\n<b>Entradas hoje</b>\n${hoje}\n\n<i>Uma estratégia só merece stake de verdade com 50+ entradas, ROI positivo e CLV positivo; compare por cerca de uma semana (150–200 entradas) antes de mudar cortes. CLV = quanto a linha andou a nosso favor até o jogo.</i>`, kb };
 }
 
 // ---------- Top 10 automático e resultado da manhã ----------
@@ -1067,7 +1077,7 @@ async function answer(text: string, chatId: number, page = 1): Promise<Out> {
   if (cmd === 'banca' || cmd === 'roi') return bancaCmd(chatId, rest);
   if (cmd === 'apagar') return apagarCmd(chatId, rest);
   if (cmd === 'resultado') return resultadoCmd(chatId, rest);
-  if (cmd === 'estrategias' || cmd === 'estrategia') return estrategiasCmd(rest);
+  if (cmd === 'estrategias' || cmd === 'estrategia') return estrategiasCmd(rest, chatId);
   if (cmd === 'gabarito') return gabaritoCmd();
   if (cmd === 'app') return { text: `📱 <b>App completo</b>\n${APP_URL}`, kb: { inline_keyboard: [[{ text: 'Abrir o app', url: APP_URL }], HOME] } };
   const d = await data();

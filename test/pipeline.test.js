@@ -27,7 +27,7 @@ test('bot.json: odd de casa quando há, referência quando não há', () => {
 test('estratégias: só com odd real, chance 55–85%, titular ou provável, até 5 por mercado', () => {
   const S = Object.fromEntries(STRATEGIES.map(s => [s.id, s]));
   const byS = {};
-  for (const p of st.picks) {
+  for (const p of st.picks.filter(p => S[p.strategy_id])) {
     assert.ok(p.odd > 1); assert.ok(p.p >= 0.55 && p.p <= 0.85);
     byS[p.strategy_id] = (byS[p.strategy_id] || 0) + 1;
     const row = bot.rows.find(r => r.id === p.pid && r.m === p.mk && r.l === p.line);

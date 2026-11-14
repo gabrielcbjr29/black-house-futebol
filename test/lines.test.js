@@ -51,3 +51,20 @@ test('estratégias: só odd de casa entre 1,40 e 3,50 e EV não negativo', () =>
   const p = pickStrategies(bot).picks.filter(x => x.strategy_id === 'm-sh');
   assert.deepEqual(p.map(x => [x.pid, x.line]), [['1', 1.5]]); // @1,07 sem valor e o 2 com EV −10% ficam de fora
 });
+test('Top 10 forte e Oportunidade forte: EV 8%/10%, nota A/A+, uma por jogador, sem repetir o modelo por mercado', () => {
+  const fut = new Date(Date.now() + 36e5).toISOString();
+  const r = (id, m, p, d, nt, gr, extra = {}) => ({ id, n: 'J' + id, t: 'T', o: 'O', g: 1, k: 'p', st: 'xi', ps: 1, m, l: 0.5, p, d, b: 'Casa', nt, gr, utc: fut, fase: 'escalacao', ...extra });
+  const rows = [
+    ...[1, 2, 3, 4, 5].map(i => r(String(i), 'FC', 0.7, 1.5, 90, 'A+')),       // enchem o teto do m-fc (EV 5%)
+    r('6', 'FC', 0.7, 1.6, 80, 'A+'),                                          // EV 12%, nota A+: sobra para o Top 10 forte
+    r('7', 'TK', 0.6, 1.7, 55, 'B'),                                           // nota B: fora
+    r('8', 'SH', 0.6, 1.9, 70, 'A'),                                           // EV 14%: modelo por mercado pega antes
+    { ...r('t9', 'TSH', 0.6, 1.9, 70, 'A'), k: 't' },
+  ];
+  const s = pickStrategies({ date: 'd', gen: 'g', rows });
+  const of = id => s.picks.filter(p => p.strategy_id === id).map(p => p.pid);
+  assert.deepEqual(of('m-fc'), ['1', '2', '3', '4', '5']);
+  assert.deepEqual(of('top10-forte'), ['6']);
+  assert.deepEqual(of('oport-forte'), []); // tudo o que tinha EV 10%+ já foi pego por outra estratégia
+  assert.ok(s.strategies.some(x => x.id === 'oport-forte' && x.max === 6));
+});

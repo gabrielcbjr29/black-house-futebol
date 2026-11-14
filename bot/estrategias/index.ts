@@ -215,7 +215,7 @@ async function risco(bot: any) {
 // conferência: jogador que não entrou = anulada; 1º tempo do jogador = manual (fica aberta até o /resultado)
 async function settle() {
   const res = await getJ('results.json'); if (!res?.stats) return { ok: false, erro: 'results.json indisponível' };
-  const open: any[] = await sb('strategy_picks?status=eq.aberta&manual=eq.false&select=id,date,pid,gid,mk,line,odd,open_line,open_odd') ?? [];
+  const open: any[] = await sb('strategy_picks?status=eq.aberta&manual=eq.false&select=id,date,pid,gid,mk,side,line,odd,open_line,open_odd') ?? [];
   let n = 0;
   for (const r of open) {
     if (!res.dates?.includes(r.date)) continue;
@@ -224,7 +224,7 @@ async function settle() {
     if (!a) continue; // jogo ainda sem estatística (adiado ou não coletado): tenta de novo depois
     const L = +(r.open_line ?? r.line), O = +(r.open_odd ?? r.odd);
     let status = 'void', result: number | null = null;
-    if (a[0] > 0) { const v = +a[RIDX[r.mk]]; result = v; status = v > L ? 'green' : 'red'; }
+    if (a[0] > 0) { const v = +a[RIDX[r.mk]]; result = v; status = (r.side === 'u' ? v < L : v > L) ? 'green' : 'red'; }
     const profit = status === 'green' ? Math.round((O - 1) * 100) / 100 : status === 'red' ? -1 : 0;
     await sb(`strategy_picks?id=eq.${r.id}`, { method: 'PATCH', body: JSON.stringify({ status, result, profit, settled_at: new Date().toISOString() }) }).catch(() => null);
     n++;
