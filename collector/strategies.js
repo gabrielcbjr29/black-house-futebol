@@ -8,6 +8,10 @@ const edgeOf = r => r.d ? r.p * r.d - 1 : null;
 // titular confirmado, ou provável titular (80%+) enquanto a escalação não sai; nunca "em dúvida" ou banco
 const starter = (r, min = 0.8) => r.st === 'xi' || (r.st === 'provavel' && r.ps >= min);
 const band = r => r.p >= 0.55 && r.p <= 0.85;
+// odd de casa na faixa das listas (1,40–3,50) e valor esperado não negativo: com as escadas das casas (0,5 / 1,5 / 2,5)
+// a linha mais segura costuma pagar @1,05–1,20 e nunca tem valor
+const ODD_MIN = 1.4, ODD_MAX = 3.5;
+const priced = r => r.d >= ODD_MIN && r.d <= ODD_MAX && edgeOf(r) >= 0;
 
 export const STRATEGIES = MKT.map(mk => {
   const M = MARKETS[mk], id = (M.kind === 'p' ? 'm-' : M.kind === 't' ? 't-' : 'j-') + mk.toLowerCase();
@@ -15,8 +19,8 @@ export const STRATEGIES = MKT.map(mk => {
     : mk === 'SV' ? 'goleiro titular confirmado ou muito provável (90%+)' : 'titular confirmado ou provável (80%+), fora da lista de dúvidas') : null;
   return {
     id, name: M.lb, markets: [mk], max: 5,
-    descr: `As 5 melhores entradas do Modelo BH em ${M.lb.toLowerCase()} (só MAIS), com linha e odd real de casa: chance do modelo entre 55% e 85%${who ? ', ' + who : ''}; ordem pela Nota BH.`,
-    test: r => !!r.d && r.m === mk && band(r) && (M.kind !== 'p' || starter(r, M.h1 || mk === 'SV' ? 0.9 : 0.8)),
+    descr: `As 5 melhores entradas do Modelo BH em ${M.lb.toLowerCase()} (só MAIS), com linha e odd real de casa entre 1,40 e 3,50 e valor esperado positivo: chance do modelo entre 55% e 85%${who ? ', ' + who : ''}; ordem pela Nota BH.`,
+    test: r => !!r.d && r.m === mk && band(r) && priced(r) && (M.kind !== 'p' || starter(r, M.h1 || mk === 'SV' ? 0.9 : 0.8)),
   };
 });
 
