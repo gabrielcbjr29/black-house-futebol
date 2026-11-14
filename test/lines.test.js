@@ -47,7 +47,7 @@ test('encaixe por time e nome ambíguo fica de fora', () => {
 import { pickStrategies } from '../collector/strategies.js';
 test('estratégias: só odd de casa entre 1,40 e 3,50 e EV não negativo', () => {
   const base = { id: '1', n: 'A', t: 'T', o: 'O', g: 9, k: 'p', st: 'xi', ps: 1, m: 'SH', nt: 80, utc: '2026-11-14T21:30:00Z', fase: 'escalacao' };
-  const bot = { date: 'd', gen: 'g', rows: [{ ...base, l: 0.5, p: 0.8, d: 1.07, b: 'x' }, { ...base, l: 1.5, p: 0.56, d: 1.7, b: 'x', nt: 60 }, { ...base, id: '2', l: 1.5, p: 0.6, d: 1.5, b: 'x' }] };
+  const bot = { date: 'd', gen: 'g', rows: [{ ...base, l: 0.5, p: 0.8, d: 1.07, b: 'x' }, { ...base, l: 1.5, p: 0.62, d: 1.7, b: 'x', nt: 60 }, { ...base, id: '2', l: 1.5, p: 0.6, d: 1.5, b: 'x' }] };
   const p = pickStrategies(bot).picks.filter(x => x.strategy_id === 'm-sh');
   assert.deepEqual(p.map(x => [x.pid, x.line]), [['1', 1.5]]); // @1,07 sem valor e o 2 com EV −10% ficam de fora
 });
