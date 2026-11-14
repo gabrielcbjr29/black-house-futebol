@@ -82,6 +82,10 @@ export function posPriors(fixtures) {
 
 const K90 = { sh: 3, sot: 4, fc: 4, fs: 4, tk: 4, sv: 3 };
 const STATS = ['sh', 'sot', 'fc', 'fs', 'tk', 'sv'];
+// minutos esperados como titular: média recente puxada para 80 com peso 0,75 (um titular que saiu cedo por lesão ou
+// expulsão não vira "joga 13 minutos"). Walk-forward fev→nov/2026: log loss melhor em todos os mercados
+// (chutes 0,4376→0,4311 · faltas 0,5058→0,4976 · desarmes 0,5543→0,5445 · defesas 0,5074→0,4966).
+const MS_K = 0.75, MS_PRIOR = 80;
 /* jogadores: taxas por 90, titularidade, minutos e sequência dos últimos 10 jogos */
 export function playerProfiles(fixtures, priors, { half = 15, maxN = 38, teamN = 8 } = {}) {
   const apps = {}, teamGames = {};
@@ -115,10 +119,22 @@ export function playerProfiles(fixtures, priors, { half = 15, maxN = 38, teamN =
       else { wnb += q; if (p && p[P.min] > 0) { wsub += q; mbS += q * p[P.min]; mbW += q; } }
     });
     const lastTeam = tg[0]?.d, lastMe = list[0].f.d;
-    out[pid] = {
+    // temporada atual do jogador (a mais recente em que ele jogou): médias como titular, por 90, casa e fora
+    const curS = played[0].f.s, season = played.filter(x => x.f.s === curS), starts = season.filter(x => x.p[P.start] && x.p[P.min] >= 60);
+    const avg = (arr, k) => arr.length ? r3(arr.reduce((a, x) => a + x.p[P[k]], 0) / arr.length) : null;
+    const min90 = season.reduce((a, x) => a + x.p[P.min], 0) / 90;
+    const isHome = x => x.f.h === x.p[P.team];
+    const ss = { s: curS, n: season.length, ns: starts.length,
+      st: Object.fromEntries(STATS.map(k => [k, avg(starts, k)])),
+      p90: Object.fromEntries(STATS.map(k => [k, min90 >= 2 ? r3(season.reduce((a, x) => a + x.p[P[k]], 0) / min90) : null])),
+      hm: { n: starts.filter(isHome).length, ...Object.fromEntries(STATS.map(k => [k, avg(starts.filter(isHome), k)])) },
+      aw: { n: starts.filter(x => !isHome(x)).length, ...Object.fromEntries(STATS.map(k => [k, avg(starts.filter(x => !isHome(x)), k)])) } };
+    // últimos 20 jogos em que entrou, para o Caçador: [min, titular, casa, liga, chutes, no gol, f.com., f.sofr., desarmes, defesas, adversário]
+    const hx = played.slice(0, 20).map(x => [x.p[P.min], x.p[P.start], isHome(x) ? 1 : 0, x.f.lg, x.p[P.sh], x.p[P.sot], x.p[P.fc], x.p[P.fs], x.p[P.tk], x.p[P.sv], isHome(x) ? x.f.a : x.f.h]);
+    out[pid] = { ss, hx,
       t: team, pos, gp: played.length, r,
       ps: r3(w ? ws / w : 0), pb: r3(wnb ? wsub / wnb : 0.3),
-      ms: Math.round(msW ? msS / msW : 82), mb: Math.round(mbW ? mbS / mbW : 22),
+      ms: Math.round((msS + MS_PRIOR * MS_K) / (msW + MS_K)), mb: Math.round(mbW ? mbS / mbW : 22),
       sr: pos === 'G' ? r3((svw + 0.69 * 20) / (svw + gcw + 20)) : undefined,
       // sequência dos últimos 10 jogos em que entrou (mais recente primeiro): minutos e cada estatística
       sq: { mn: played.slice(0, 10).map(x => x.p[P.min]), ...Object.fromEntries(STATS.map(k => [k, played.slice(0, 10).map(x => x.p[P[k]])])) },
@@ -128,13 +144,65 @@ export function playerProfiles(fixtures, priors, { half = 15, maxN = 38, teamN =
   return out;
 }
 
-/* árbitro: faltas por jogo em relação à média da liga, encolhido para 1 com poucos jogos */
+/* nome do árbitro vem da API em formatos diferentes ("M. Oliver", "Michael Oliver", com ou sem acento):
+   chave = inicial do primeiro nome + sobrenome final, sem acento */
+export function refKey(name) {
+  const t = String(name ?? '').split(',')[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean);
+  return t.length > 1 ? t[0][0] + ' ' + t[t.length - 1] : t[0] ?? '';
+}
+/* árbitro: faltas por jogo em relação à média da liga (fator encolhido para 1 com poucos jogos), faltas e cartões por jogo */
 export function refereeFactors(fixtures, LP, K = 8) {
   const a = {};
   for (const f of fixtures) {
     if (!f.ref || !f.t?.[f.h] || !f.t?.[f.a]) continue;
-    const L = lgOf(LP, f.lg), x = a[f.ref] ??= { n: 0, s: 0 };
-    x.n++; x.s += (f.t[f.h][T.fc] + f.t[f.a][T.fc]) / L.fc;
+    const L = lgOf(LP, f.lg), x = a[refKey(f.ref)] ??= { n: 0, s: 0, fc: 0, lf: 0, yc: 0, lg: {} };
+    const fc = f.t[f.h][T.fc] + f.t[f.a][T.fc];
+    x.n++; x.s += fc / L.fc; x.fc += fc; x.lf += L.fc; x.yc += f.p.reduce((t, p) => t + (p[P.yc] || 0), 0); x.lg[f.lg] = (x.lg[f.lg] || 0) + 1;
   }
-  return Object.fromEntries(Object.entries(a).map(([k, x]) => [k, { n: x.n, f: r3((x.s + K) / (x.n + K)) }]));
+  return Object.fromEntries(Object.entries(a).map(([k, x]) => [k, { n: x.n, f: r3((x.s + K) / (x.n + K)), fpg: r3(x.fc / x.n), lfpg: r3(x.lf / x.n), cpg: r3(x.yc / x.n),
+    lg: +Object.entries(x.lg).sort((p, q) => q[1] - p[1])[0][0] }]));
+}
+
+/* adversário por posição: quanto cada time cede a jogadores de cada posição, em relação ao que cede no geral.
+   shape = (cedido à posição ÷ esperado para a posição) ÷ (cedido a todos ÷ esperado para todos), encolhido para 1.
+   >1: o time cede mais que o normal àquela posição (ex.: lateral que deixa o ponta chutar). */
+const OPP_STATS = ['sh', 'sot', 'fc', 'fs', 'tk'];
+export function oppPosition(fixtures, { half = 12, maxN = 38, K = 40 } = {}) {
+  // taxa por 90 de cada posição em cada liga (o "esperado")
+  const lr = {};
+  for (const f of fixtures) for (const p of f.p) {
+    if (!(p[P.min] > 0) || !p[P.pos]) continue;
+    const x = (lr[f.lg] ??= {})[p[P.pos]] ??= { m: 0, sh: 0, sot: 0, fc: 0, fs: 0, tk: 0 };
+    x.m += p[P.min] / 90; for (const k of OPP_STATS) x[k] += p[P[k]];
+  }
+  const rate = (lg, pos, k) => { const x = lr[lg]?.[pos]; return x && x.m > 50 ? x[k] / x.m : null; };
+  const byTeam = {};
+  for (let i = fixtures.length - 1; i >= 0; i--) { const f = fixtures[i]; for (const t of [f.h, f.a]) (byTeam[t] ??= []).push(f); }
+  const out = {};
+  for (const [tid, list] of Object.entries(byTeam)) {
+    const acc = {}; // pos → stat → [real, esperado]
+    list.slice(0, maxN).forEach((f, i) => {
+      const w = decay(i, half);
+      for (const p of f.p) {
+        if (String(p[P.team]) === tid || !(p[P.min] > 0) || !p[P.pos]) continue; // jogadores do adversário
+        for (const k of OPP_STATS) {
+          const r = rate(f.lg, p[P.pos], k); if (r == null) continue;
+          const e = r * p[P.min] / 90, a = ((acc[p[P.pos]] ??= {})[k] ??= [0, 0]), t = ((acc.ALL ??= {})[k] ??= [0, 0]);
+          a[0] += w * p[P[k]]; a[1] += w * e; t[0] += w * p[P[k]]; t[1] += w * e;
+        }
+      }
+    });
+    const res = {};
+    for (const pos of ['G', 'D', 'M', 'F']) {
+      const o = {};
+      for (const k of OPP_STATS) {
+        const a = acc[pos]?.[k], t = acc.ALL?.[k]; if (!a || !t || !t[1]) continue;
+        const rp = (a[0] + K) / (a[1] + K), ra = (t[0] + K) / (t[1] + K);
+        o[k] = r3(Math.max(0.7, Math.min(1.4, rp / ra)));
+      }
+      if (Object.keys(o).length) res[pos] = o;
+    }
+    out[tid] = res;
+  }
+  return out;
 }

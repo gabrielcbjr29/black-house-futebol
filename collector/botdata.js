@@ -16,12 +16,19 @@ function indexLines(lines) {
   return idx;
 }
 const hitRate = (vals, line) => vals.length ? [vals.filter(v => v > line).length, vals.length] : null;
+// sequência: quantos jogos seguidos (do mais recente para trás) ele passou da linha
+const streak = (vals, line) => { let n = 0; for (const v of vals) { if (v > line) n++; else break; } return n; };
+const avgOf = a => a.length ? r3(a.reduce((x, y) => x + y, 0) / a.length) : null;
+// quanto o adversário cede por jogo (últimos 10 jogos dele): [jogo, chutes, no gol, faltas, chutes adv., no gol adv., faltas adv.]
+// chutes/no gol do jogador → o que o adversário sofre; faltas cometidas → faltas que o adversário sofre;
+// faltas sofridas → faltas que o adversário comete; defesas do goleiro → chutes no gol que o adversário dá
+const OPP_COL = { sh: 4, sot: 5, fc: 6, fs: 3, sv: 2 };
 // valores de uma estatística nos jogos em que ele foi titular de fato (60+ min), do mais recente para o mais antigo
 const starts = (sq, st) => (sq?.[st] ?? []).filter((_, i) => (sq.mn?.[i] ?? 0) >= 60).slice(0, 10);
 
 export function buildBotData(slate, lines = new Map(), { houses = [] } = {}) {
   const G = Object.fromEntries(slate.games.map(g => [g.id, g]));
-  const idx = indexLines(lines), rows = [];
+  const idx = indexLines(lines), rows = [], T0 = slate.model.teams;
   const push = (base, mk, probAt, cand, extra) => {
     const v = extra.vals ?? [];
     for (const c of cand) {
@@ -31,7 +38,7 @@ export function buildBotData(slate, lines = new Map(), { houses = [] } = {}) {
       const nt = notaBH({ p, e, hit: h10 && h10[1] >= 3 ? h10[0] / h10[1] : null, ctx: extra.ctx, cert: extra.cert });
       rows.push({ ...base, m: mk, s: 'o', l: c.line, p: r3(p), d: best?.odd ?? null, b: best?.house ?? null,
         of: c.offers.length > 1 ? c.offers.map(o => [o.house, o.odd]) : undefined, e: e == null ? null : r3(e),
-        hit: h10, h5, nt, gr: grade(nt), ref: c.offers.length ? undefined : 1 });
+        hit: h10, h5, sk: v.length ? streak(v, c.line) : undefined, nt, gr: grade(nt), ref: c.offers.length ? undefined : 1 });
     }
   };
   // ---------- jogadores ----------
@@ -50,7 +57,11 @@ export function buildBotData(slate, lines = new Map(), { houses = [] } = {}) {
       const house = idx.get(`${g.id}|${pid}|${mk}`);
       const ref = house ? null : refLine(probAt, M.lines);
       const cand = house ?? (ref ? [{ line: ref.l, offers: [] }] : []);
-      push({ ...base, pj: r3(P.ps * s + (1 - P.ps) * b), ps1: r3(s), sq: vals, cx: P.ctx?.[M.st] ?? 1 }, mk, probAt, cand, {
+      // números extras do card: por 90 e média como titular na temporada, casa × fora, quanto o adversário cede
+      const st = M.st, ss = P.ss, oc = OPP_COL[st], ol = T0[g.id]?.last?.[P.home ? 'a' : 'h'] ?? [];
+      const ex = ss ? { p90: ss.p90?.[st] ?? null, sa: ss.st?.[st] ?? null, ns: ss.ns, hm: ss.hm?.[st] ?? null, nh: ss.hm?.n ?? 0, aw: ss.aw?.[st] ?? null, na: ss.aw?.n ?? 0,
+        oa: oc != null ? avgOf(ol.map(x => x[oc])) : null, op: P.op?.[st] ?? null } : undefined;
+      push({ ...base, pj: r3(P.ps * s + (1 - P.ps) * b), ps1: r3(s), sq: vals, cx: P.ctx?.[M.st] ?? 1, ex }, mk, probAt, cand, {
         ctx: P.ctx?.[M.st] ?? 1, cert, vals,
       });
     }
@@ -66,7 +77,8 @@ export function buildBotData(slate, lines = new Map(), { houses = [] } = {}) {
         const vals = (T.last?.[side] ?? []).map(x => x[STI[st]]);
         const id = `t${team.id}-${gid}`, house = idx.get(`${gid}|${id}|${tmk}`);
         const ref = house ? null : refLine(probAt, teamLines(mu));
-        push({ id, n: team.name, t: team.name, o: opp.name, home: side === 'h', g: g.id, lg: g.lg, utc: g.utc, fase: g.fase, k: 't', pj: r3(mu), sq: vals }, tmk, probAt,
+        const ol = T.last?.[side === 'h' ? 'a' : 'h'] ?? [], oa = avgOf(ol.map(x => x[STI[st] + 3]));
+        push({ id, n: team.name, t: team.name, o: opp.name, home: side === 'h', g: g.id, lg: g.lg, utc: g.utc, fase: g.fase, k: 't', pj: r3(mu), sq: vals, ex: { oa, sa: avgOf(vals) } }, tmk, probAt,
           house ?? (ref ? [{ line: ref.l, offers: [] }] : []), { ctx: 1, cert: 1, vals });
       }
       // total do jogo: soma dos dois times (dispersão da soma, sem passar do teto do mercado)
@@ -85,7 +97,7 @@ export function buildBotData(slate, lines = new Map(), { houses = [] } = {}) {
   const mdl = {
     p: Object.fromEntries(Object.entries(slate.model.players).map(([pid, P]) => {
       const g = G[P.g], mine = g?.home.id === P.t ? g?.home : g?.away, opp = g?.home.id === P.t ? g?.away : g?.home;
-      return [pid, { n: P.n, t: P.t, tn: mine?.name, on: opp?.name, home: P.home, g: P.g, utc: g?.utc, pos: P.pos, ps: P.ps, pb: P.pb, st: P.st, ms: P.ms, mu: P.mu,
+      return [pid, { n: P.n, t: P.t, tn: mine?.name, on: opp?.name, home: P.home, g: P.g, lg: g?.lg, utc: g?.utc, pos: P.pos, ps: P.ps, pb: P.pb, st: P.st, ms: P.ms, gap: P.gap ?? 0, mu: P.mu,
         sq: Object.fromEntries(['sh', 'sot', 'fc', 'fs', 'tk', 'sv'].map(k => [k, starts(P.sq, k)])) }];
     })),
     t: Object.fromEntries(Object.entries(slate.model.teams).map(([gid, T]) => [gid, { h: T.h, a: T.a, hn: T.hn, an: T.an, pj: T.pj, ref: T.ref, rf: T.rf }])),
@@ -100,6 +112,9 @@ export function buildBotData(slate, lines = new Map(), { houses = [] } = {}) {
   return {
     date: slate.date, gen: slate.gen,
     games: slate.games.map(g => ({ id: g.id, lg: g.lg, utc: g.utc, st: g.status, h: g.home.name, a: g.away.name, hid: g.home.id, aid: g.away.id, fase: g.fase, ref: g.ref || null })),
-    injuries: slate.injuries, inj: slate.inj ?? [], houses, rows, mdl, ks: Object.fromEntries(Object.entries(MARKETS).map(([k, v]) => [k, v.k])),
+    injuries: slate.injuries, inj: slate.inj ?? [], refs: slate.refs ?? {}, houses, rows, mdl,
+    // Caçador: últimos 20 jogos de cada jogador do dia [min, titular, casa, liga, chutes, no gol, f.com., f.sofr., desarmes, defesas]
+    hunt: { date: slate.date, gen: slate.gen, p: Object.fromEntries(Object.entries(slate.model.players).filter(([, P]) => P.hx?.length).map(([pid, P]) => [pid, P.hx.map(h => h.slice(0, 10))])) },
+    ks: Object.fromEntries(Object.entries(MARKETS).map(([k, v]) => [k, v.k])),
   };
 }

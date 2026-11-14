@@ -52,9 +52,10 @@ export function fmtEntries(list: any[]) {
   });
   return { blocks, regs, n: i };
 }
-async function send(text: string, kb: unknown) {
+async function send(text: string, kb: unknown, all = false) {
   const token = await cfg('TELEGRAM_BOT_TOKEN'); if (!token) return 0;
-  const subs: any[] = await sb('bot_subs?select=chat_id&est=eq.true') ?? [];
+  // all: quem recebe as estratégias ou os tops (alerta de escalação)
+  const subs: any[] = await sb(all ? 'bot_subs?select=chat_id&or=(est.eq.true,chutes.eq.true,faltas.eq.true)' : 'bot_subs?select=chat_id&est=eq.true') ?? [];
   let sent = 0;
   for (const s of subs) {
     const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -109,7 +110,48 @@ async function record(silent = false) {
   const alertas = silent ? 0 : await alert(toAlert, evMin).catch(e => { console.error('alerta', e); return 0; });
   const bot = await getJ('bot.json').catch(() => null);
   const risk = bot?.date === st.date ? await risco(bot).catch(e => ({ erro: String(e) })) : { skip: 'bot.json de outro dia' };
-  return { ok: true, date: st.date, atualizadas: rows.length, novas: fresh.length, alertadas: toAlert.length, alertas, risco: risk };
+  const lu = bot?.date === st.date && !silent ? await escalacao(bot).catch(e => ({ erro: String(e) })) : { skip: 'sem bot.json do dia' };
+  return { ok: true, date: st.date, atualizadas: rows.length, novas: fresh.length, alertadas: toAlert.length, alertas, risco: risk, escalacao: lu };
+}
+
+// ---------- 📋 Alerta de escalação: quando a escalação oficial de um jogo sai, uma mensagem por jogo com as entradas
+// alertadas e os tops do modelo daquele jogo, dizendo quem é titular, quem está no banco e quem ficou fora ----------
+async function escalacao(bot: any) {
+  const now = Date.now();
+  const games = (bot.games ?? []).filter((g: any) => g.fase === 'escalacao' && Date.parse(g.utc) > now - 10 * 6e4);
+  if (!games.length) return { jogos: 0 };
+  const flags = new Set(((await sb(`bot_config?key=like.LU:${bot.date}:*&select=key`)) ?? []).map((r: any) => r.key));
+  const todo = games.filter((g: any) => !flags.has(`LU:${bot.date}:${g.id}`));
+  if (!todo.length) return { jogos: 0 };
+  const ids = todo.map((g: any) => g.id).join(',');
+  const [est, tops]: any[][] = await Promise.all([
+    sb(`strategy_picks?date=eq.${bot.date}&alerted=eq.true&gid=in.(${ids})&select=pid,name,team,mk,line,odd,odd_src,gid`).then(x => x ?? []),
+    sb(`top_picks?date=eq.${bot.date}&gid=in.(${ids})&select=pid,name,team,mk,line,list,rank,gid&order=list.asc,rank.asc`).then(x => x ?? []),
+  ]);
+  const ST = (pid: string) => {
+    if (pid.startsWith('t') || pid.startsWith('j')) return '⚽';
+    const m = bot.mdl?.p?.[pid];
+    return !m ? '❌' : m.st === 'xi' ? '✅' : m.st === 'banco' ? '🪑' : '❔';
+  };
+  const TX: Record<string, string> = { '✅': 'titular', '🪑': '<b>no banco</b> ⚠️', '❌': '<b>fora dos relacionados</b> ⚠️', '❔': 'sem confirmação', '⚽': '' };
+  const line = (x: any) => { const s = ST(x.pid); return `${s} <b>${esc(x.pid.startsWith('j') ? 'Jogo' : x.pid.startsWith('t') ? x.team : x.name)}</b> · ${MKN[x.mk] ?? x.mk} mais de ${n1(+x.line)}${TX[s] ? ' · ' + TX[s] : ''}`; };
+  let enviados = 0;
+  for (const g of todo) {
+    const e = est.filter(x => +x.gid === g.id), t = tops.filter(x => +x.gid === g.id && !e.some(y => y.pid === x.pid && y.mk === x.mk));
+    if (e.length || t.length) {
+      const bad = [...e, ...t].filter(x => ['🪑', '❌'].includes(ST(x.pid))).length;
+      const text = `📋 <b>ESCALAÇÃO SAIU · ${esc(g.h)} x ${esc(g.a)}</b> · ${hourBR(g.utc)}
+${bad ? `<i>⚠️ ${bad} entrada${bad > 1 ? 's' : ''} com jogador fora do time titular: reveja antes de apostar.</i>` : '<i>Todos os jogadores das entradas começam jogando.</i>'}
+${e.length ? `\n🧪 <b>Entradas alertadas</b>\n<blockquote>${e.map(line).join('\n')}</blockquote>` : ''}${t.length ? `\n🎯 <b>Tops do Modelo BH</b>\n<blockquote>${t.map(line).join('\n')}</blockquote>` : ''}
+<i>✅ titular · 🪑 banco · ❌ fora da lista · as chances já foram refeitas com a escalação</i>
+${FOOT}`;
+      enviados += await send(text, { inline_keyboard: [[{ text: '🏟️ Linhas do jogo', callback_data: `/jogo ${g.id}` }, { text: '🧪 Placar', callback_data: '/estrategias' }]] }, true);
+    }
+    await sb('bot_config?on_conflict=key', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ key: `LU:${bot.date}:${g.id}`, value: String(e.length + t.length) }) });
+  }
+  // marcas de dias anteriores não servem mais
+  await sb(`bot_config?key=like.LU:*&key=not.like.LU:${bot.date}:*`, { method: 'DELETE' }).catch(() => null);
+  return { jogos: todo.length, enviados };
 }
 
 // ---------- Monitor de risco (duas fases): vigia as entradas alertadas até o jogo começar ----------

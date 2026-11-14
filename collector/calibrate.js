@@ -49,7 +49,7 @@ function walk(F, H, minTrain, step, from) {
         a.mus.push(m.mu[mk][0]); a.vals.push(val); a.ds.push(Date.parse(f.d));
         for (const L of MARKETS[mk].lines.slice(0, 3)) {
           const pr = playerOver({ start: m.mu[mk][0], bench: 0 }, mk, L, 1, 0), hit = val > L ? 1 : 0;
-          a.n++; a.sumP += pr; a.hits += hit; a.brier += (pr - hit) ** 2;
+          a.n++; a.sumP += pr; a.hits += hit; a.brier += (pr - hit) ** 2; a.ll = (a.ll || 0) - Math.log(Math.min(Math.max(hit ? pr : 1 - pr, 1e-4), 1));
           const b = (Math.floor(pr * 10) / 10).toFixed(1), B = a.bins[b] ??= [0, 0, 0]; B[0] += pr; B[1] += hit; B[2]++;
         }
       }
@@ -64,7 +64,7 @@ function walk(F, H, minTrain, step, from) {
     const fator = rn >= 1500 && rm > 0 ? rv / rm : a.vals.reduce((x, y) => x + y, 0) / sm;
     // dispersão k: a que dá o menor erro (log loss) nas linhas do mercado, já com a média calibrada
     const kSug = bestK(a.mus.map(mu => mu * fator), a.vals, MARKETS[mk].lines.slice(0, 3));
-    out[mk] = { n: a.n, previsto: +(a.sumP / a.n).toFixed(3), acertado: +(a.hits / a.n).toFixed(3), brier: +(a.brier / a.n).toFixed(4),
+    out[mk] = { n: a.n, previsto: +(a.sumP / a.n).toFixed(3), acertado: +(a.hits / a.n).toFixed(3), brier: +(a.brier / a.n).toFixed(4), logloss: +(a.ll / a.n).toFixed(4),
       media_prevista: +(sm / a.mus.length).toFixed(3), media_real: +(a.vals.reduce((x, y) => x + y, 0) / a.vals.length).toFixed(3), k_atual: MARKETS[mk].k, k_sugerido: kSug,
       fator: +fator.toFixed(3), fator_n: rn,
       faixas: Object.fromEntries(Object.entries(a.bins).sort().map(([b, [sp, h, n]]) => [b, { n, previsto: +(sp / n).toFixed(3), acertado: +(h / n).toFixed(3) }])) };

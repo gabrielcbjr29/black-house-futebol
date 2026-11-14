@@ -1,5 +1,6 @@
 // Black House Futebol · app (PWA estático no GitHub Pages). Lê public/data/*.json gerados pela coleta.
 import { MARKETS, playerOver, nbOver, ev } from './engine.js';
+import { PRESETS, DEFAULT, HUNT_MK, preset, run as huntRun } from './hunter.js';
 
 const FN = 'https://mccxlgtiulpknubdiyrz.supabase.co/functions/v1/';
 const LG = { 39: ['🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Premier League'], 140: ['🇪🇸', 'La Liga'], 135: ['🇮🇹', 'Serie A'], 78: ['🇩🇪', 'Bundesliga'], 61: ['🇫🇷', 'Ligue 1'], 71: ['🇧🇷', 'Brasileirão'], 2: ['🏆', 'Champions'] };
@@ -12,7 +13,10 @@ const pc = x => Math.round(x * 100) + '%';
 const pct = x => (x >= 0 ? '+' : '') + (x * 100).toFixed(1).replace('.', ',') + '%';
 const hour = iso => new Date(iso).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
 const get = f => fetch('data/' + f + '?t=' + Math.floor(Date.now() / 60000)).then(r => r.ok ? r.json() : null).catch(() => null);
-let D = null, ST = null;
+let D = null, ST = null, H = null;
+const POSN = { G: 'goleiros', D: 'defensores', M: 'meio-campistas', F: 'atacantes' }, POS1 = { G: 'GOL', D: 'DEF', M: 'MEI', F: 'ATA' };
+const rigor = f => f >= 1.07 ? 'rigoroso' : f <= 0.93 ? 'deixa jogar' : 'normal';
+const refName = s => String(s).split(',')[0].trim();
 
 function spark(r) {
   if (!r.sq?.length) return '';
@@ -29,7 +33,7 @@ function card(r, i) {
     <div class="who"><b>${who}</b><span class="grade ${g}">${r.gr} · ${r.nt}</span></div>
     <div class="meta">${LG[r.lg]?.[0] ?? ''} ${r.k === 'p' ? esc(r.t) + ' x ' + esc(r.o) : r.k === 't' ? 'x ' + esc(r.o) : 'jogo'} · ${hour(r.utc)}${st ? ` · <span class="chip ${st[0]}">${st[1]}${r.st === 'provavel' ? ' ' + pc(r.ps) : ''}</span>` : ''}${r.fase === 'escalacao' ? ' · escalação ✓' : ''}</div>
     <div class="bet"><span class="ln">MAIS DE ${n1(r.l)} <small>${esc(MARKETS[r.m].lb.toLowerCase())}</small></span>${odd}</div>
-    <div class="nums"><span>Chance <b>${pc(r.p)}</b></span>${r.e != null ? `<span>EV <b class="${r.e >= 0 ? 'pos' : 'neg'}">${pct(r.e)}</b></span>` : ''}<span>Projeção <b>${n1(Math.round(r.pj * 10) / 10)}</b></span>${r.hit ? `<span>${r.hit[0]}/${r.hit[1]} na linha</span>` : ''}</div>
+    <div class="nums"><span>Chance <b>${pc(r.p)}</b></span>${r.e != null ? `<span>EV <b class="${r.e >= 0 ? 'pos' : 'neg'}">${pct(r.e)}</b></span>` : ''}<span>Projeção <b>${n1(Math.round(r.pj * 10) / 10)}</b></span>${r.hit ? `<span>${r.hit[0]}/${r.hit[1]} na linha</span>` : ''}${r.sk >= 3 ? `<span class="chip hot">🔥 ${r.sk} seguidos</span>` : ''}</div>
     ${spark(r)}
   </button>`;
 }
@@ -43,11 +47,37 @@ function renderList() {
     if (lg && String(r.lg) !== lg) return false; if (mk && r.m !== mk) return false; if (gid && String(r.g) !== gid) return false;
     if (onlyOdd && !r.d) return false;
     if (q && !(`${r.n} ${r.t} ${r.o}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(q))) return false;
-    if (one) { if (seen.has(r.id)) return false; seen.add(r.id); }
     return true;
-  }).slice(0, 150);
-  $('#countHint').textContent = `${VIEW.length} entradas · só MAIS · ordem pela Nota BH${D.rows.some(r => r.d) ? '' : ' · nenhuma casa lida ainda: odds justas do modelo'}`;
+  });
+  const so = $('#fSort').value;
+  if (so === 'e') VIEW.sort((a, b) => (b.e ?? -9) - (a.e ?? -9));
+  else if (so === 'p') VIEW.sort((a, b) => b.p - a.p);
+  else if (so === 'sk') VIEW.sort((a, b) => (b.sk ?? 0) - (a.sk ?? 0) || b.nt - a.nt);
+  if (one) VIEW = VIEW.filter(r => !seen.has(r.id) && seen.add(r.id));
+  VIEW = VIEW.slice(0, 150);
+  const ORD = { nt: 'ordem pela Nota BH', e: 'ordem pelo EV', p: 'ordem pela chance', sk: 'ordem pela sequência (só informação: a sequência não entra na chance)' };
+  $('#countHint').textContent = `${VIEW.length} entradas · só MAIS · ${ORD[so]}${D.rows.some(r => r.d) ? '' : ' · nenhuma casa lida ainda: odds justas do modelo'}`;
   $('#list').innerHTML = VIEW.map(card).join('') || '<p class="hint">Nada com esses filtros.</p>';
+}
+// números da temporada, mando, adversário e árbitro (card completo)
+function facts(r) {
+  const x = r.ex, F = [], st = MARKETS[r.m]?.st;
+  if (x && !MARKETS[r.m]?.h1) {
+    if (r.k === 'p') {
+      if (x.sa != null && x.ns >= 2) F.push([n1(x.sa), `por jogo como titular na temporada (${x.ns})`]);
+      if (x.p90 != null) F.push([n1(x.p90), 'por 90 minutos na temporada']);
+      if (x.hm != null && x.nh >= 2) F.push([n1(x.hm), `em casa (${x.nh})${r.home ? ' · hoje' : ''}`]);
+      if (x.aw != null && x.na >= 2) F.push([n1(x.aw), `fora (${x.na})${!r.home ? ' · hoje' : ''}`]);
+      if (x.oa != null) F.push([n1(x.oa), `${st === 'fc' ? 'faltas que o ' + esc(r.o) + ' sofre' : st === 'fs' ? 'faltas que o ' + esc(r.o) + ' comete' : st === 'sv' ? 'chutes no gol que o ' + esc(r.o) + ' dá' : (st === 'sot' ? 'chutes no gol' : 'chutes') + ' que o ' + esc(r.o) + ' cede'} por jogo (últ. 10)`]);
+      if (x.op != null && Math.abs(x.op - 1) >= 0.06 && POSN[r.pos]) F.push([pct(x.op - 1), `que o normal a ${POSN[r.pos]} contra o ${esc(r.o)} (só informação)`]);
+    } else if (r.k === 't') {
+      if (x.sa != null) F.push([n1(x.sa), `do ${esc(r.t)} por jogo (últ. 10)`]);
+      if (x.oa != null) F.push([n1(x.oa), `que o ${esc(r.o)} cede por jogo (últ. 10)`]);
+    }
+  }
+  const T = D.mdl.t[r.g], R = T?.ref ? D.refs?.[T.ref] : null;
+  if (R && ['FC', 'FS', 'TFC', 'JFC'].includes(r.m)) F.push([n1(R.fpg), `faltas/jogo com ${esc(refName(T.ref))} (liga ${n1(R.lfpg)}) · ${n1(R.cpg)} cartões · ${rigor(R.f)}`]);
+  return F.length ? `<div class="facts">${F.map(([b, t]) => `<div><b>${b}</b>${t}</div>`).join('')}</div>` : '';
 }
 function detail(r) {
   const k = D.ks?.[r.m] ?? MARKETS[r.m].k;
@@ -57,6 +87,7 @@ function detail(r) {
   const lines = r.k === 'p' ? MARKETS[r.m].lines : [r.l - 2, r.l - 1, r.l, r.l + 1, r.l + 2].filter(x => x > 0);
   const others = r.k === 'p' ? D.rows.filter(x => x.id === r.id && x !== r) : [];
   $('#dlgBody').innerHTML = `<h2>${esc(r.n)}</h2><p class="meta">${esc(r.t)} x ${esc(r.o)} · ${hour(r.utc)} · ${esc(MARKETS[r.m].lb)}${r.k === 'p' ? ` · ${STL[r.st]?.[1] ?? ''}` : ''}</p>
+    ${facts(r)}
     <table><tr><th>Linha</th><th class="r">Chance</th><th class="r">Odd justa</th></tr>${lines.map(L => { const p = probAt(L); return `<tr><td>Mais de ${n1(L)}</td><td class="r">${pc(p)}</td><td class="r">${p > 0 ? n2(1 / p) : '–'}</td></tr>`; }).join('')}</table>
     ${r.of?.length ? `<h2>Casas</h2><table>${r.of.map(([h, o]) => `<tr><td>${esc(h)}</td><td class="r">@${n2(o)}</td><td class="r">EV ${pct(ev(r.p, o))}</td></tr>`).join('')}</table>` : ''}
     <h2>Calcular</h2><div class="calc"><label>Linha <input id="cL" inputmode="decimal" value="${n1(r.l)}"></label><label>Odd <input id="cO" inputmode="decimal" placeholder="1,85"></label><output id="cOut"></output></div>
@@ -70,7 +101,7 @@ function renderGames() {
   $('#games').innerHTML = D.games.map(g => {
     const rows = D.rows.filter(r => r.g === g.id && r.k !== 'p');
     const pj = D.mdl.t[g.id]?.pj;
-    return `<div class="game"><div class="meta">${LG[g.lg]?.[0] ?? ''} ${LG[g.lg]?.[1] ?? ''} · ${hour(g.utc)}${g.ref ? ' · árbitro ' + esc(g.ref) : ''}</div><h3>${esc(g.h)} x ${esc(g.a)}</h3>
+    return `<div class="game"><div class="meta">${LG[g.lg]?.[0] ?? ''} ${LG[g.lg]?.[1] ?? ''} · ${hour(g.utc)}${g.ref ? ' · 🟨 ' + esc(refName(g.ref)) + (D.refs?.[g.ref] ? ` · ${n1(D.refs[g.ref].fpg)} faltas e ${n1(D.refs[g.ref].cpg)} cartões/jogo (${rigor(D.refs[g.ref].f)})` : '') : ''}</div><h3>${esc(g.h)} x ${esc(g.a)}</h3>
       ${pj ? `<table><tr><th>Projeção</th><th class="r">${esc(g.h)}</th><th class="r">${esc(g.a)}</th></tr>${[['sh', 'Chutes'], ['sot', 'Chutes ao gol'], ['fc', 'Faltas'], ['poss', 'Posse %']].map(([k, lb]) => `<tr><td>${lb}</td><td class="r">${n1(Math.round(pj.h[k] * 10) / 10)}</td><td class="r">${n1(Math.round(pj.a[k] * 10) / 10)}</td></tr>`).join('')}</table>` : '<p class="hint">Jogo encerrado ou sem projeção.</p>'}
       <p class="meta">${g.fase === 'escalacao' ? '✅ escalação oficial' : '🕐 antes da escalação'} · ${rows.filter(r => r.d).length} linhas de time com odd de casa</p></div>`;
   }).join('') || '<p class="hint">Sem jogos das ligas do projeto hoje.</p>';
@@ -86,11 +117,54 @@ async function renderGuide() {
   const c = await get('calib.json');
   if (c?.mercados) $('#calib').innerHTML = `<div class="tablewrap"><table><tr><th>Mercado</th><th class="r">Amostra</th><th class="r">Chance prevista</th><th class="r">Acerto real</th><th class="r">Brier</th><th class="r">Média prevista/real</th></tr>${Object.entries(c.mercados).map(([k, x]) => `<tr><td>${esc(MARKETS[k]?.lb ?? k)}</td><td class="r">${x.n}</td><td class="r">${pc(x.previsto)}</td><td class="r">${pc(x.acertado)}</td><td class="r">${x.brier}</td><td class="r">${x.media_prevista} / ${x.media_real}</td></tr>`).join('')}</table></div><p class="hint">Validação semana a semana: o modelo só enxerga os jogos anteriores. Gerada em ${new Date(c.gen).toLocaleDateString('pt-BR')}.</p>`;
 }
+// ---------- Caçador ----------
+let HF = { ...DEFAULT }, HP = '', HVIEW = [];
+function hForm() {
+  $('#hMk').value = HF.mk; hLines(); $('#hL').value = String(HF.l); $('#hW').value = String(HF.w);
+  $('#hPct').value = HF.pct; $('#hPctO').textContent = HF.pct + '%';
+  for (const c of document.querySelectorAll('#hPos input')) c.checked = HF.pos.includes(c.value);
+  $('#hVenue').value = HF.venue; $('#hTit').value = HF.tit ? String(HF.mmin) : '1'; $('#hOdd').value = HF.odd ? n2(HF.odd) : '';
+  $('#hGap').value = String(HF.gap); $('#hLiga').checked = HF.liga; $('#hConf').checked = HF.conf;
+  for (const b of document.querySelectorAll('.preset')) b.classList.toggle('on', b.dataset.k === HP);
+}
+function hLines() { const L = MARKETS[$('#hMk').value].lines; $('#hL').innerHTML = L.map(l => `<option value="${l}">Mais de ${n1(l)}</option>`).join(''); }
+function hRead() {
+  const t = +$('#hTit').value, o = parseFloat($('#hOdd').value.replace(',', '.'));
+  HF = { mk: $('#hMk').value, l: +$('#hL').value, w: +$('#hW').value, pct: +$('#hPct').value, pos: [...document.querySelectorAll('#hPos input:checked')].map(c => c.value),
+    venue: $('#hVenue').value, tit: t > 1, mmin: t, odd: o > 1 ? o : 0, conf: $('#hConf').checked, liga: $('#hLiga').checked, gap: +$('#hGap').value };
+  $('#hPctO').textContent = HF.pct + '%';
+}
+function dots(vals, l) { return `<div class="dots" title="Mais recente à esquerda">${vals.map(v => `<i class="${v > l ? 'hit' : ''}" title="${v}"></i>`).join('')}</div>`; }
+async function renderHunt() {
+  if (!H) { $('#hHint').textContent = 'Carregando o histórico dos jogadores…'; H = await get('hunt.json'); }
+  if (!H) { $('#hHint').textContent = 'O histórico do caçador ainda não foi publicado.'; return; }
+  HVIEW = huntRun(D, H, HF);
+  const P = PRESETS[HP];
+  $('#hHint').textContent = `${HVIEW.length} jogador${HVIEW.length === 1 ? '' : 'es'} · mais de ${n1(HF.l)} ${MARKETS[HF.mk].lb.toLowerCase()} em ${HF.pct}%+ dos últimos ${HF.w}${HF.tit ? ` como titular (${HF.mmin}+ min)` : ''}${P ? ' · ' + P.why : ''}`;
+  $('#hList').innerHTML = HVIEW.map((x, i) => `<button class="card" data-i="${i}">
+    <div class="who"><b>${esc(x.m.n)}</b><span class="grade ${x.e != null && x.e >= .05 ? 'ap' : x.p >= .6 ? 'a' : ''}">${x.hit}/${x.n}</span></div>
+    <div class="meta">${LG[x.m.lg]?.[0] ?? ''} ${esc(x.m.tn)} · ${POS1[x.m.pos] ?? x.m.pos} · ${x.m.home ? 'x' : '@'} ${esc(x.m.on)} · ${hour(x.m.utc)}${x.m.st === 'xi' ? ' · <span class="chip xi">titular</span>' : ` · <span class="chip">provável ${pc(x.m.ps)}</span>`}</div>
+    <div class="bet"><span class="ln">MAIS DE ${n1(HF.l)} <small>${esc(MARKETS[HF.mk].lb.toLowerCase())}</small></span>${x.house ? `<span class="odd">@${n2(x.odd)} <small>${esc(x.house)}</small></span>` : `<span class="odd"><small>justa</small> @${n2(x.odd)}</span>`}</div>
+    <div class="nums"><span>Modelo <b>${pc(x.p)}</b>${x.hit / x.n - x.p >= .2 ? ' ⚠️' : ''}</span>${x.e != null ? `<span>EV <b class="${x.e >= 0 ? 'pos' : 'neg'}">${pct(x.e)}</b></span>` : ''}<span>Histórico <b>${pc(x.hit / x.n)}</b></span>${x.sk >= 3 ? `<span class="chip hot">🔥 ${x.sk} seguidos</span>` : ''}</div>
+    ${dots(x.vals, HF.l)}
+  </button>`).join('') || '<p class="hint">Ninguém passou no filtro hoje. Afrouxe o acerto mínimo, a janela ou a odd.</p>';
+}
+function initHunt() {
+  $('#hPresets').innerHTML = Object.entries(PRESETS).map(([k, P]) => `<button class="preset" data-k="${k}" title="${esc(P.why)}">${P.ic} ${esc(P.name)}</button>`).join('');
+  $('#hMk').innerHTML = HUNT_MK.map(k => `<option value="${k}">${MARKETS[k].lb}</option>`).join('');
+  $('#hPresets').addEventListener('click', e => { const b = e.target.closest('.preset'); if (!b) return; HP = b.dataset.k; HF = preset(HP); hForm(); renderHunt(); });
+  $('#hMk').addEventListener('change', () => { hLines(); });
+  $('.hunt').addEventListener('input', () => { hRead(); HP = ''; for (const b of document.querySelectorAll('.preset')) b.classList.remove('on'); renderHunt(); });
+  $('#hList').addEventListener('click', e => { const b = e.target.closest('.card'); if (!b) return; const x = HVIEW[+b.dataset.i];
+    const r = D.rows.find(r => r.id === x.pid && r.m === HF.mk && r.l === HF.l) ?? D.rows.find(r => r.id === x.pid && r.m === HF.mk);
+    if (r) detail(r.l === HF.l ? r : { ...r, l: HF.l, p: x.p, d: x.house ? x.odd : null, b: x.house, e: x.e }); });
+  HP = 'classico'; HF = preset(HP); hForm();
+}
 function route() {
   const v = (location.hash || '#entradas').slice(1);
   for (const s of document.querySelectorAll('.view')) s.hidden = s.id !== 'v-' + v;
   for (const a of document.querySelectorAll('.tabs a')) a.classList.toggle('on', a.getAttribute('href') === '#' + v);
-  if (v === 'estrategias') renderStrategies(); if (v === 'guia') renderGuide();
+  if (v === 'estrategias') renderStrategies(); if (v === 'guia') renderGuide(); if (v === 'cacador') renderHunt();
 }
 async function main() {
   [D, ST] = await Promise.all([get('bot.json'), get('strategies.json')]);
@@ -100,7 +174,8 @@ async function main() {
   $('#fLg').innerHTML += [...new Set(D.games.map(g => g.lg))].map(l => `<option value="${l}">${LG[l]?.[1] ?? l}</option>`).join('');
   $('#fMk').innerHTML += Object.entries(MARKETS).map(([k, v]) => `<option value="${k}">${v.lb}</option>`).join('');
   $('#fGame').innerHTML += D.games.map(g => `<option value="${g.id}">${hour(g.utc)} ${esc(g.h)} x ${esc(g.a)}</option>`).join('');
-  for (const id of ['#q', '#fLg', '#fMk', '#fGame', '#fOdd', '#fOne']) $(id).addEventListener('input', renderList);
+  for (const id of ['#q', '#fLg', '#fMk', '#fGame', '#fOdd', '#fOne', '#fSort']) $(id).addEventListener('input', renderList);
+  initHunt();
   $('#list').addEventListener('click', e => { const b = e.target.closest('.card'); if (b) detail(VIEW[+b.dataset.i]); });
   renderList(); renderGames();
   addEventListener('hashchange', route); route();

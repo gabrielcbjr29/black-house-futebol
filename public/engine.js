@@ -90,6 +90,15 @@ export function projectTeams(home, away, L = LEAGUE_PRIOR, ref = 1) {
 /* ---------- jogadores ---------- */
 /* Contexto do jogo para cada estatística do jogador: quanto o jogo de hoje foge da média do time dele.
    mine/theirs = projeção do time do jogador e do adversário hoje; tAvg = média do próprio time por jogo (feitos e sofridos). */
+/* peso do ajuste "adversário por posição" em cada estatística (0 = desligado). Só liga onde o walk-forward mostrou ganho.
+   Teste de nov/2026 (fev→nov, ~106 mil linhas por mercado, K 12/40/120, peso 0,5 e 1): nenhum ganho de log loss em
+   chutes, no gol, faltas ou desarmes; com peso 1 piorou todos. Fica desligado; o número aparece no card só como informação. */
+export const POS_ALPHA = { sh: 0, sot: 0, fc: 0, fs: 0, tk: 0 };
+export function posShape(op, pos, alpha = POS_ALPHA) {
+  const o = op?.[pos] ?? {}, out = {};
+  for (const k of Object.keys(alpha)) out[k] = alpha[k] && o[k] ? Math.pow(o[k], alpha[k]) : 1;
+  return out;
+}
 export function playerContext(mine, theirs, tAvg) {
   const r = (a, b) => b > 0 ? clamp(a / b, 0.6, 1.6) : 1;
   return {

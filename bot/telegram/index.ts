@@ -37,12 +37,15 @@ const TG = async (m: string, body: unknown) => { const c = await cfg(); return f
 
 type Row = { id: string; n: string; t: string; o: string; home: boolean; g: number; lg: number; utc: string; fase: string; k: 'p' | 't' | 'j'; pos?: string; ps?: number; st?: string; ms?: number;
   m: string; s: 'o'; l: number; p: number; d: number | null; b: string | null; of?: [string, number][]; e: number | null; pj: number; ps1?: number; sq?: number[]; jh?: number[]; ja?: number[];
-  hit: [number, number] | null; h5: [number, number] | null; cx?: number; nt: number; gr: string; ref?: 1; cd?: 1 };
-type MPlayer = { n: string; t: number; tn: string; on: string; home: boolean; g: number; utc: string; pos: string; ps: number; pb: number; st: string; ms: number; mu: Record<string, [number, number]>; sq: Record<string, number[]> };
+  hit: [number, number] | null; h5: [number, number] | null; sk?: number; cx?: number; nt: number; gr: string; ref?: 1; cd?: 1;
+  ex?: { p90?: number | null; sa?: number | null; ns?: number; hm?: number | null; nh?: number; aw?: number | null; na?: number; oa?: number | null; op?: number | null } };
+type MPlayer = { n: string; t: number; tn: string; on: string; home: boolean; g: number; lg?: number; gap?: number; utc: string; pos: string; ps: number; pb: number; st: string; ms: number; mu: Record<string, [number, number]>; sq: Record<string, number[]> };
 type Game = { id: number; lg: number; utc: string; st: string; h: string; a: string; hid: number; aid: number; fase: string; ref: string | null };
 type Data = { date: string; gen: string; demo?: boolean; games: Game[]; rows: Row[]; inj: { g: number; n: string; t: string; st: string; why: string }[];
   mdl: { p: Record<string, MPlayer>; t: Record<string, { h: number; a: number; hn: string; an: string; pj: { h: Record<string, number>; a: Record<string, number> }; ref: string | null; rf: number }> };
-  ks: Record<string, number>; houses: { house: string; at: string; n: number }[] };
+  ks: Record<string, number>; houses: { house: string; at: string; n: number }[];
+  refs?: Record<string, { n: number; f: number; fpg: number; lfpg: number; cpg: number; lg: number } | null> };
+type Hunt = { date: string; gen: string; p: Record<string, number[][]> };
 
 let CACHE: { at: number; data: Data } | null = null;
 async function data(): Promise<Data> {
@@ -51,6 +54,16 @@ async function data(): Promise<Data> {
   if (!r.ok) throw new Error('dados indisponíveis (' + r.status + ')');
   CACHE = { at: Date.now(), data: await r.json() };
   return CACHE.data;
+}
+
+// Caçador: últimos 20 jogos de cada jogador do dia (arquivo à parte, só carrega quando alguém usa)
+let HCACHE: { at: number; data: Hunt } | null = null;
+async function hunt(): Promise<Hunt> {
+  if (HCACHE && Date.now() - HCACHE.at < 300_000) return HCACHE.data;
+  const r = await fetch((await cfg()).dataUrl.replace(/bot\.json$/, 'hunt.json') + '?t=' + Math.floor(Date.now() / 300_000), { headers: { 'Cache-Control': 'no-cache' } });
+  if (!r.ok) throw new Error('dados do caçador indisponíveis (' + r.status + ')');
+  HCACHE = { at: Date.now(), data: await r.json() };
+  return HCACHE.data;
 }
 
 // ---------- textos ----------
@@ -119,6 +132,31 @@ function ctxTxt(r: Row) {
     : st === 'tk' ? `${esc(r.o)} deve ter <b>${sg}</b> de posse que o normal` : '';
   return t ? `\n🛡️ ${t[0].toUpperCase() + t.slice(1)}${tag}` : '';
 }
+// números da temporada e do adversário (card completo)
+const POSN: Record<string, string> = { G: 'goleiros', D: 'defensores', M: 'meio-campistas', F: 'atacantes' };
+const OA: Record<string, string> = { sh: 'chutes', sot: 'chutes no gol', fc: 'faltas sofridas', fs: 'faltas cometidas', sv: 'chutes no gol (finaliza)' };
+function numsTxt(r: Row) {
+  const x = r.ex; if (!x || /1$/.test(r.m)) return '';
+  const st = MSTAT[r.m] ?? { TSH: 'sh', TSOT: 'sot', TFC: 'fc' }[r.m], out: string[] = [];
+  if (r.k === 'p') {
+    const a: string[] = [];
+    if (x.sa != null && (x.ns ?? 0) >= 2) a.push(`<b>${n1(x.sa)}</b> por jogo como titular (${x.ns})`);
+    if (x.p90 != null) a.push(`<b>${n1(x.p90)}</b> por 90`);
+    if (a.length) out.push('📈 Temporada: ' + a.join(' · '));
+    if (x.hm != null && x.aw != null && (x.nh ?? 0) >= 2 && (x.na ?? 0) >= 2) out.push(`🏠 Casa <b>${n1(x.hm)}</b> (${x.nh}) · ✈️ Fora <b>${n1(x.aw)}</b> (${x.na})${r.home ? ' · hoje em casa' : ' · hoje fora'}`);
+    if (x.oa != null && OA[st]) {
+      const verb = st === 'fc' ? 'sofre' : st === 'fs' ? 'comete' : st === 'sv' ? 'dá' : 'cede';
+      const obj = st === 'fc' ? 'faltas' : st === 'fs' ? 'faltas' : st === 'sv' ? 'chutes no gol' : OA[st];
+      out.push(`🛡️ ${esc(r.o)} ${verb} <b>${n1(x.oa)}</b> ${obj} por jogo (últ. 10)${x.op != null && Math.abs(x.op - 1) >= 0.06 && r.pos && POSN[r.pos] ? ` · a ${POSN[r.pos]}: <b>${pctS(x.op - 1)}</b> que o normal` : ''}`);
+    }
+  } else if (r.k === 't') {
+    if (x.sa != null) out.push(`📈 ${esc(r.t)}: <b>${n1(x.sa)}</b> por jogo (últ. 10)`);
+    if (x.oa != null) out.push(`🛡️ ${esc(r.o)} cede <b>${n1(x.oa)}</b> ${st === 'fc' ? 'faltas (sofre)' : st === 'sot' ? 'chutes no gol' : 'chutes'} por jogo (últ. 10)`);
+  }
+  return out.length ? '\n' + out.join('\n') : '';
+}
+const refName = (s: string) => String(s).split(',')[0].trim();
+const rigor = (f: number) => f >= 1.07 ? '🔴 <b>rigoroso</b>' : f <= 0.93 ? '🟢 <b>deixa jogar</b>' : '⚪ normal';
 function hitsTxt(r: Row) {
   if (r.k === 'j') return r.jh?.length ? `📊 Total nos últimos 5 · ${esc(r.t)}: <b>${r.jh.slice(0, 5).join('-')}</b> · ${esc(r.o)}: <b>${(r.ja ?? []).slice(0, 5).join('-')}</b>` : '';
   if (/1$/.test(r.m)) return '📊 <i>1º tempo: sem histórico por jogador; a chance usa a fatia do 1º tempo da liga</i>';
@@ -138,13 +176,15 @@ ${hitsTxt(r)}
 // análise completa (🔎)
 function card(d: Data, r: Row, i: number) {
   const T = d.mdl.t[String(r.g)];
-  const ref = (r.m === 'FC' || r.m === 'FS' || r.m === 'TFC' || r.m === 'JFC') && T?.ref ? `\n🟨 Árbitro: ${esc(T.ref)}${T.rf && Math.abs(T.rf - 1) >= 0.03 ? ` · <b>${pctS(T.rf - 1)}</b> faltas por jogo que a média` : ''}` : '';
+  const R = T?.ref ? d.refs?.[T.ref] : null;
+  const ref = (r.m === 'FC' || r.m === 'FS' || r.m === 'TFC' || r.m === 'JFC') && T?.ref ? `\n🟨 Árbitro: ${esc(refName(T.ref))}${R ? ` · <b>${n1(R.fpg)}</b> faltas/jogo (liga ${n1(R.lfpg)}) · ${n1(R.cpg)} cartões · ${rigor(R.f)}` : T.rf && Math.abs(T.rf - 1) >= 0.03 ? ` · <b>${pctS(T.rf - 1)}</b> faltas por jogo que a média` : ''}` : '';
   const casas = r.of && r.of.length > 1 ? `\n🏠 Casas: ${r.of.map(([h, o]) => `${esc(h)} @${n2(o)}`).join(' · ')}` : '';
   const refl = r.ref ? '\n📏 <i>Linha de referência do modelo: nenhuma casa abriu essa linha ainda</i>' : '';
-  const mins = r.k === 'p' && r.ms ? `\n⏱️ ~${r.ms} min quando titular${r.ps1 != null ? ` · média como titular <b>${n1(r.ps1)}</b>` : ''}` : '';
+  const mins = r.k === 'p' && r.ms ? `\n⏱️ ~${r.ms} min quando titular${r.ps1 != null ? ` · Modelo BH como titular <b>${n1(r.ps1)}</b>` : ''}` : '';
+  const nums = numsTxt(r);
   // por que sim / por que não
   const wy: string[] = [], wn: string[] = [];
-  if (r.hit && r.hit[1] >= 5 && r.hit[0] / r.hit[1] >= .7) wy.push(`✅ Bateu em ${r.hit[0]} dos últimos ${r.hit[1]} como titular`);
+  if (r.hit && r.hit[1] >= 5 && r.hit[0] / r.hit[1] >= .7) wy.push(`✅ Bateu em ${r.hit[0]} dos últimos ${r.hit[1]}${r.k === 'p' ? ' como titular' : ' jogos'}`);
   if (r.cx != null && r.cx >= 1.08) wy.push('✅ Adversário favorece essa estatística');
   if (r.st === 'xi') wy.push('✅ Titular confirmado na escalação oficial');
   if (r.e != null && r.e >= .05) wy.push(`✅ Valor na odd da casa (EV ${evS(r.e)})`);
@@ -160,7 +200,7 @@ function card(d: Data, r: Row, i: number) {
 ${GRADE[r.gr] ?? r.gr} · Nota <b>${r.nt}</b>  ${bar(r.p)} <b>${pc(r.p)}</b>
 ${oddTxt(r)}${evTxt(r)}${casas}${refl}
 ${hitsTxt(r)}
-🧠 Modelo BH <b>${n1(r.pj)}</b>${r.k === 'p' && r.st ? ' · ' + STL(r) : ''}${mins}${ctxTxt(r)}${ref}</blockquote>${why.length ? `\n<blockquote expandable><b>Por que sim / por que não</b>\n${why.join('\n')}</blockquote>` : ''}`;
+🧠 Modelo BH <b>${n1(r.pj)}</b>${r.k === 'p' && r.st ? ' · ' + STL(r) : ''}${mins}${nums}${ctxTxt(r)}${ref}</blockquote>${why.length ? `\n<blockquote expandable><b>Por que sim / por que não</b>\n${why.join('\n')}</blockquote>` : ''}`;
 }
 function header(d: Data, title: string, extra = '') {
   return `<b>${title}</b>\n<i>${dateBR(d.date)} · ${d.games.length} jogos · atualizado ${hourBR(d.gen)}${d.demo ? ' · demonstração' : ''}${extra}</i>\n`;
@@ -759,6 +799,179 @@ ${bar(p)} chance ${pc(p)} · EV ${evx >= 0 ? '+' : ''}${evx.toFixed(1).replace('
 ` + FOOT, kb };
 }
 
+// ---------- 🎯 Caçador de props ----------
+// Filtra os jogadores do dia pelo histórico recente (acertos na linha) e mostra ao lado a chance do Modelo BH e o EV.
+// hx: [min, titular, casa, liga, chutes, no gol, f.com., f.sofr., desarmes, defesas] (mais recente primeiro)
+const HX: Record<string, number> = { SH: 4, SOT: 5, FC: 6, FS: 7, TK: 8, SV: 9 };
+type HF = { mk: string; l: number; w: number; pct: number; pos: string[]; venue: '' | 'casa' | 'fora'; tit: boolean; mmin: number; odd: number; conf: boolean; liga: boolean; gap: number };
+const HF0: HF = { mk: 'SH', l: 0.5, w: 10, pct: 70, pos: [], venue: '', tit: true, mmin: 60, odd: 0, conf: false, liga: false, gap: 0 };
+const PRESETS: Record<string, { name: string; ic: string; why: string; f: Partial<HF> }> = {
+  classico: { name: 'Clássico', ic: '🎯', why: 'chutou em quase todo jogo como titular', f: { mk: 'SH', l: 0.5, w: 10, pct: 80 } },
+  zagueiro: { name: 'Zagueiro que chuta', ic: '🧱', why: 'defensor com chute frequente: odd costuma ser alta', f: { mk: 'SH', l: 0.5, w: 20, pct: 50, pos: ['D'], odd: 2.2 } },
+  quente: { name: 'Fase quente', ic: '🔥', why: 'acertou o gol em 4 dos últimos 5', f: { mk: 'SOT', l: 0.5, w: 5, pct: 80, pos: ['M', 'F'], odd: 1.8 } },
+  centroavante: { name: 'Volume de chute', ic: '💥', why: 'atacante com 2+ chutes em 70% dos jogos', f: { mk: 'SH', l: 1.5, w: 15, pct: 70, pos: ['F'], odd: 1.6 } },
+  volante: { name: 'Volante faltoso', ic: '🟨', why: 'meio-campista que faz falta quase todo jogo', f: { mk: 'FC', l: 0.5, w: 15, pct: 80, pos: ['M'], odd: 1.5 } },
+  ima: { name: 'Ímã de falta', ic: '🧲', why: 'sofre 2+ faltas em 60% dos jogos', f: { mk: 'FS', l: 1.5, w: 10, pct: 60, pos: ['M', 'F'], odd: 1.9 } },
+  desarme: { name: 'Máquina de desarme', ic: '🦶', why: '2+ desarmes em 60% dos jogos', f: { mk: 'TK', l: 1.5, w: 15, pct: 60, pos: ['D', 'M'], odd: 1.8 } },
+  goleiro: { name: 'Goleiro ocupado', ic: '🧤', why: '3+ defesas em 60% dos jogos', f: { mk: 'SV', l: 2.5, w: 10, pct: 60, pos: ['G'] } },
+};
+const POSW: Record<string, string> = { goleiro: 'G', goleiros: 'G', gk: 'G', zagueiro: 'D', zagueiros: 'D', defensor: 'D', defensores: 'D', lateral: 'D', laterais: 'D', defesa: 'D',
+  meia: 'M', meias: 'M', volante: 'M', volantes: 'M', meio: 'M', 'meio-campo': 'M', atacante: 'F', atacantes: 'F', ponta: 'F', pontas: 'F', centroavante: 'F', ataque: 'F' };
+const POS1: Record<string, string> = { G: 'GOL', D: 'DEF', M: 'MEI', F: 'ATA' };
+function parseHunt(args: string[]): { f: HF; preset?: string; err?: string } {
+  const a0 = norm(args[0] ?? '').replace(/ /g, '');
+  const p0 = a0 && PRESETS[a0] ? a0 : undefined;
+  const f: HF = { ...HF0, ...(p0 ? PRESETS[p0].f : {}) }, pos = new Set<string>(p0 ? f.pos : []);
+  let mkSet = !!p0;
+  for (let i = p0 ? 1 : 0; i < args.length; i++) {
+    const raw = args[i].toLowerCase().replace(',', '.'), t = norm(args[i]);
+    const two = norm(args[i] + ' ' + (args[i + 1] ?? ''));
+    if (STATW[two] && !/1t$/.test(two)) { f.mk = STATW[two]; mkSet = true; i++; continue; }
+    if (STATW[t]) { f.mk = STATW[t]; mkSet = true; continue; }
+    let m: RegExpExecArray | null;
+    if ((m = /^l(5|10|15|20)$/.exec(t))) { f.w = +m[1]; continue; }
+    if ((m = /^@(\d+(?:\.\d+)?)$/.exec(raw))) { f.odd = +m[1]; continue; }
+    if ((m = /^(\d{1,3})%?$/.exec(raw)) && +m[1] >= 20 && +m[1] <= 100) { f.pct = +m[1]; continue; }
+    if ((m = /^(\d+\.5)$/.exec(raw))) { f.l = +m[1]; continue; }
+    if ((m = /^min(\d{1,2})$/.exec(t))) { f.mmin = +m[1]; continue; }
+    if ((m = /^(?:ult|j)(\d{1,2})$/.exec(t))) { f.gap = +m[1]; continue; }
+    if (POSW[t]) { pos.add(POSW[t]); continue; }
+    if (t === 'casa' || t === 'fora') { f.venue = t; continue; }
+    if (t === 'titular' || t === 'titulares') { f.tit = true; continue; }
+    if (t === 'todos' || t === 'qualquer') { f.tit = false; f.mmin = 1; continue; }
+    if (t === 'liga' || t === 'mesmaliga') { f.liga = true; continue; }
+    if (t === 'conf' || t === 'confirmado' || t === 'escalado') { f.conf = true; continue; }
+    return { f, preset: p0, err: `não entendi "<b>${esc(args[i])}</b>"` };
+  }
+  if (!mkSet) return { f, err: 'falta o mercado (chutes, nogol, faltas, sofridas, desarmes ou defesas)' };
+  if (/1$/.test(f.mk)) return { f, err: '1º tempo não tem histórico por jogador na API, então o caçador não cobre' };
+  f.pos = [...pos];
+  if (f.mk === 'SV') f.pos = ['G'];
+  return { f, preset: p0 };
+}
+const huntCmd = (f: HF) => ['/cacador', MKS[f.mk] === 'no gol' ? 'nogol' : ({ SH: 'chutes', FC: 'faltas', FS: 'sofridas', TK: 'desarmes', SV: 'defesas' } as Record<string, string>)[f.mk] ?? f.mk,
+  n1(f.l), 'L' + f.w, String(f.pct), ...f.pos.map(p => ({ G: 'goleiro', D: 'defensor', M: 'meia', F: 'atacante' } as Record<string, string>)[p]), f.venue, f.tit ? '' : 'todos', f.mmin !== 60 && f.tit ? 'min' + f.mmin : '',
+  f.odd ? '@' + n1(f.odd) : '', f.conf ? 'conf' : '', f.liga ? 'liga' : '', f.gap ? 'ult' + f.gap : ''].filter(Boolean).join(' ');
+const huntDesc = (f: HF) => [`mais de ${n1(f.l)} ${MK[f.mk]}`, `${f.pct}%+ nos últimos ${f.w}${f.tit ? ` como titular (${f.mmin}+ min)` : ''}`,
+  f.pos.length ? f.pos.map(p => POSN[p]).join(' e ') : '', f.venue === 'casa' ? 'jogos em casa (e hoje em casa)' : f.venue === 'fora' ? 'jogos fora (e hoje fora)' : '',
+  f.liga ? 'só a mesma competição de hoje' : '', f.odd ? `odd ${n2(f.odd)}+` : '', f.conf ? 'titular confirmado' : '', f.gap ? `jogou nos últimos ${f.gap} jogos do time` : ''].filter(Boolean).join(' · ');
+type HR = { pid: string; m: MPlayer; hit: number; n: number; vals: number[]; p: number; odd: number; house: string | null; e: number | null; sk: number };
+function huntRun(d: Data, H: Hunt, f: HF): HR[] {
+  const out: HR[] = [], c = HX[f.mk];
+  for (const [pid, m] of Object.entries(d.mdl?.p ?? {})) {
+    if (!m.mu?.[f.mk] || Date.parse(m.utc) < Date.now() - 5 * 6e4) continue;
+    if (f.pos.length && !f.pos.includes(m.pos)) continue;
+    if (f.conf ? m.st !== 'xi' : (m.st === 'banco' || (m.st !== 'xi' && m.ps < 0.6))) continue;
+    if (f.venue && (f.venue === 'casa') !== m.home) continue;
+    if (f.gap && (m.gap ?? 0) > f.gap) continue;
+    const hx = H.p[pid]; if (!hx) continue;
+    const g = hx.filter(h => h[0] >= (f.tit ? f.mmin : Math.max(1, f.mmin === 60 ? 1 : f.mmin)) && (!f.tit || h[1]) && (!f.venue || (f.venue === 'casa') === !!h[2]) && (!f.liga || h[3] === m.lg)).slice(0, f.w);
+    if (g.length < Math.ceil(f.w * 0.6) || g.length < 3) continue;
+    const vals = g.map(h => h[c]), hit = vals.filter(v => v > f.l).length;
+    if (hit / g.length * 100 < f.pct - 1e-9) continue;
+    const p = pAt(d, pid, f.mk, f.l); if (p == null) continue;
+    const row = d.rows.find(r => r.id === pid && r.m === f.mk && r.l === f.l && r.d);
+    const odd = row?.d ?? 1 / Math.max(p, 0.01);
+    if (f.odd && odd < f.odd - 1e-9) continue;
+    let sk = 0; for (const v of vals) { if (v > f.l) sk++; else break; }
+    out.push({ pid, m, hit, n: g.length, vals, p, odd, house: row?.b ?? null, e: row?.d ? p * row.d - 1 : null, sk });
+  }
+  // ranking: com odd de casa, pelo EV; sem odd, pela chance do modelo (o histórico já passou no filtro)
+  return out.sort((a, b) => ((b.e ?? -9) - (a.e ?? -9)) || (b.p - a.p) || (b.hit / b.n - a.hit / a.n));
+}
+async function cacadorCmd(d: Data, rest: string[], page: number): Promise<Out> {
+  const menu = { inline_keyboard: [...chunk(Object.entries(PRESETS).map(([k, P]) => BTN(`${P.ic} ${P.name}`, `/cacador ${k}`)), 2), [BTN('🔥 Sequências', '/sequencias'), BTN('🟨 Árbitros', '/arbitros')], HOME] };
+  if (!rest.length) return { text: `<b>🎯 CAÇADOR DE PROPS</b>
+<i>Filtra os jogadores de hoje pelo que fizeram nos últimos jogos e mostra a chance do Modelo BH e o EV ao lado.</i>
+
+Escolha um filtro pronto ou monte o seu:
+<code>/cacador chutes 1,5 L10 70 atacante casa @1,8</code>
+
+<blockquote expandable><b>O que dá para usar</b>
+mercado: chutes · nogol · faltas · sofridas · desarmes · defesas
+linha: 0,5 · 1,5 · 2,5 …
+janela: L5 · L10 · L15 · L20
+acerto mínimo: 60 · 70 · 80 (%)
+posição: goleiro · defensor · meia · atacante
+casa ou fora: só jogos nesse mando (e hoje nesse mando)
+titular (padrão, 60+ min) · todos · min70 (minutos mínimos)
+liga: só jogos da mesma competição de hoje
+conf: só titular confirmado na escalação
+ult3: jogou em algum dos 3 últimos jogos do time
+@1,8: odd mínima (de casa, ou justa do modelo sem casa)</blockquote>
+⚠️ <i>Acerto passado não é chance futura: o ranking vem pelo EV (com odd de casa) e pela chance do modelo.</i>`, kb: menu };
+  const { f, preset, err } = parseHunt(rest);
+  if (err) return { text: `🎯 Caçador: ${err}.\n\nExemplo: <code>/cacador chutes 1,5 L10 70 atacante</code>`, kb: menu };
+  const H = await hunt();
+  const res = huntRun(d, H, f), cmd = preset ? '/cacador ' + preset : huntCmd(f);
+  const P = preset ? PRESETS[preset] : null;
+  const title = `🎯 CAÇADOR · ${P ? P.name.toUpperCase() : MKN[f.mk].toUpperCase()}`;
+  const desc = `<i>${huntDesc(f)}</i>${P ? `\n<i>${P.why}</i>` : ''}`;
+  if (!res.length) return { text: header(d, title) + `\n${desc}\n\nNinguém passou no filtro hoje. Afrouxe o acerto mínimo, a janela ou a odd.\n` + FOOT, kb: menu };
+  const pages = Math.ceil(res.length / 8), pg = Math.max(1, Math.min(pages, page)), sl = res.slice((pg - 1) * 8, pg * 8);
+  const body = sl.map((x, i) => {
+    const k = (pg - 1) * 8 + i + 1, flag = x.hit / x.n - x.p >= 0.2 ? ' ⚠️' : '';
+    return `<b>${k}. ${esc(x.m.n)}</b> <i>(${esc(x.m.tn)} · ${POS1[x.m.pos] ?? x.m.pos})</i> ${x.m.home ? 'x' : '@'} ${esc(x.m.on)} · ${hourBR(x.m.utc)}${x.m.st === 'xi' ? ' ✅' : ''}
+${sqDots(x.vals, f.l, f.w).dots} <b>${x.hit}/${x.n}</b>${x.sk >= 3 ? ` · 🔥 ${x.sk} seguidos` : ''}
+🧠 Modelo <b>${pc(x.p)}</b>${flag} · ${x.house ? `<code>@${n2(x.odd)}</code> ${esc(x.house)} · EV <b>${evS(x.e)}</b>` : `odd justa <code>@${n2(x.odd)}</code>`}`;
+  }).join('\n\n');
+  const nav = [pg > 1 ? BTN('◀', `p:${pg - 1}:${cmd}`) : null, pages > 1 ? BTN(`${pg}/${pages}`, `p:${pg}:${cmd}`) : null, pg < pages ? BTN('▶', `p:${pg + 1}:${cmd}`) : null].filter(Boolean) as { text: string; callback_data: string }[];
+  const reg = sl.map((x, i) => BTN(`📝 ${(pg - 1) * 8 + i + 1}`, `bm:${x.pid}:${f.mk}:${f.l}`));
+  return { text: header(d, title, ` · ${res.length} jogador${res.length > 1 ? 'es' : ''}`) + `\n${desc}\n\n<blockquote>${body}</blockquote>
+<i>🟩 bateu · 🟥 não bateu (mais recente primeiro) · ✅ titular confirmado · ⚠️ histórico bem acima do modelo: a sequência pode estar inflada</i>
+` + FOOT, kb: { inline_keyboard: [...chunk(reg, 4), ...(nav.length ? [nav] : []), [BTN('🎯 Outros filtros', '/cacador')], home(cmd, pg)] } };
+}
+
+// ---------- 🔥 Sequências: só informação; o ranking continua pela chance e pelo EV ----------
+const SEQ_MK = ['SH', 'SOT', 'FC', 'FS', 'TK', 'SV'];
+function sequenciasCmd(d: Data, rest: string[], page: number): Out {
+  const only = rest[0] ? STATW[norm(rest.join(' '))] : null;
+  const items: { pid: string; m: MPlayer; mk: string; l: number; sk: number; n: number; p: number; row?: Row }[] = [];
+  for (const [pid, m] of Object.entries(d.mdl?.p ?? {})) {
+    if (Date.parse(m.utc) < Date.now() - 5 * 6e4 || m.st === 'banco' || (m.st !== 'xi' && m.ps < 0.6)) continue;
+    for (const mk of SEQ_MK) {
+      if (only && mk !== only) continue;
+      const v = m.sq?.[MSTAT[mk]]; if (!v?.length || !m.mu?.[mk]) continue;
+      // a linha mais alta em que ele vem batendo há 5+ jogos seguidos como titular
+      // (só linhas com odd na faixa 1,40–3,50: "0,5 chute do centroavante" não paga nada)
+      for (const l of [...LINES[mk]].reverse()) {
+        let sk = 0; for (const x of v) { if (x > l) sk++; else break; }
+        if (sk < 5) continue;
+        const p = pAt(d, pid, mk, l) ?? 0, row = d.rows.find(r => r.id === pid && r.m === mk && r.l === l && r.d), odd = row?.d ?? 1 / Math.max(p, .01);
+        if (odd < ODD_MIN - 1e-9 || odd > ODD_MAX + 1e-9) continue;
+        items.push({ pid, m, mk, l, sk, n: v.length, p, row }); break;
+      }
+    }
+  }
+  items.sort((a, b) => b.sk - a.sk || b.l - a.l || b.p - a.p);
+  const cmd = '/sequencias' + (rest.length ? ' ' + rest.join(' ') : '');
+  const kb0 = [[BTN('Chutes', '/sequencias chutes'), BTN('No gol', '/sequencias nogol'), BTN('Faltas', '/sequencias faltas')], [BTN('Sofridas', '/sequencias sofridas'), BTN('Desarmes', '/sequencias desarmes'), BTN('Defesas', '/sequencias defesas')]];
+  if (!items.length) return { text: header(d, '🔥 SEQUÊNCIAS') + '\nNinguém do dia com 5+ jogos seguidos batendo uma linha como titular.\n' + FOOT, kb: { inline_keyboard: [...kb0, HOME] } };
+  const pages = Math.ceil(items.length / 10), pg = Math.max(1, Math.min(pages, page)), sl = items.slice((pg - 1) * 10, pg * 10);
+  const body = sl.map((x, i) => `<b>${(pg - 1) * 10 + i + 1}. ${esc(x.m.n)}</b> <i>(${esc(x.m.tn)})</i> · ${hourBR(x.m.utc)}
+🔥 <b>${x.sk} seguidos</b> com mais de ${n1(x.l)} ${MK[x.mk]}${x.sk === x.n ? ' <i>(todos os últimos ' + x.n + ')</i>' : ''}
+🧠 Modelo <b>${pc(x.p)}</b> · ${x.row ? `<code>@${n2(x.row.d!)}</code> ${esc(x.row.b ?? '')} · EV <b>${evS(x.row.e)}</b>` : `odd justa <code>@${n2(1 / Math.max(x.p, .01))}</code>`}`).join('\n\n');
+  const nav = [pg > 1 ? BTN('◀', `p:${pg - 1}:${cmd}`) : null, pages > 1 ? BTN(`${pg}/${pages}`, `p:${pg}:${cmd}`) : null, pg < pages ? BTN('▶', `p:${pg + 1}:${cmd}`) : null].filter(Boolean) as { text: string; callback_data: string }[];
+  return { text: header(d, '🔥 SEQUÊNCIAS' + (only ? ' · ' + MKN[only].toUpperCase() : ''), ` · ${items.length} na lista`) + `\n<blockquote>${body}</blockquote>
+<i>⚠️ Sequência é informação, não motivo. Casa também vê e costuma pôr no preço; o que decide é a chance do modelo contra a odd (EV). Só jogos como titular (60+ min) e odds 1,40–3,50.</i>
+` + FOOT, kb: { inline_keyboard: [...kb0, ...(nav.length ? [nav] : []), home(cmd, pg)] } };
+}
+
+// ---------- 🟨 Árbitros do dia ----------
+function arbitrosCmd(d: Data, page = 1): Out {
+  const gs = d.games.filter(g => g.ref && Date.parse(g.utc) > Date.now() - 5 * 6e4).map(g => ({ g, R: d.refs?.[g.ref!] ?? null }))
+    .sort((a, b) => (b.R?.f ?? 1) - (a.R?.f ?? 1));
+  const sem = d.games.filter(g => !g.ref && Date.parse(g.utc) > Date.now() - 5 * 6e4).length;
+  if (!gs.length) return { text: header(d, '🟨 ÁRBITROS DO DIA') + '\nOs árbitros ainda não foram anunciados para os jogos de hoje.\n' + FOOT, kb: { inline_keyboard: [HOME] } };
+  const PG = 10, pages = Math.ceil(gs.length / PG), pg = Math.max(1, Math.min(pages, page));
+  const body = gs.slice((pg - 1) * PG, pg * PG).map(({ g, R }) => `⚽ <b>${esc(short(g.h, 16))} x ${esc(short(g.a, 16))}</b> · ${hourBR(g.utc)}${R ? ' · ' + rigor(R.f) : ''}
+🟨 ${esc(refName(g.ref!))}${R ? ` · <b>${n1(R.fpg)}</b> faltas (liga ${n1(R.lfpg)}) · <b>${n1(R.cpg)}</b> cartões · ${R.n}j${R.n < 8 ? ' <i>(poucos jogos)</i>' : ''}` : ' · <i>sem histórico</i>'}`).join('\n');
+  const nav = [pg > 1 ? BTN('◀', `p:${pg - 1}:/arbitros`) : null, pages > 1 ? BTN(`${pg}/${pages}`, `p:${pg}:/arbitros`) : null, pg < pages ? BTN('▶', `p:${pg + 1}:/arbitros`) : null].filter(Boolean) as { text: string; callback_data: string }[];
+  return { text: header(d, '🟨 ÁRBITROS DO DIA', ` · ${gs.length}`) + `\n<blockquote>${body}</blockquote>
+<i>Faltas e cartões por jogo no histórico (2025 e 2026). 🔴 rigoroso: 7%+ faltas que a média da liga no modelo · 🟢 deixa jogar: 7%+ abaixo. O efeito já entra nas faltas do Modelo BH, puxado para a média quando há poucos jogos.${sem ? ` ${sem} jogo${sem > 1 ? 's' : ''} sem árbitro anunciado.` : ''}</i>
+` + FOOT, kb: { inline_keyboard: [...(nav.length ? [nav] : []), [BTN('🧱 Faltas', '/faltas'), BTN('🤕 Sofridas', '/sofridas'), BTN('➕ Totais', '/totais')], home('/arbitros', pg)] } };
+}
+
 const HELP = `<b>📖 COMANDOS</b>
 
 <b>Melhores do dia</b>
@@ -774,6 +987,9 @@ const HELP = `<b>📖 COMANDOS</b>
 
 <b>Filtros</b>
 /jogo arsenal · /jogador saka
+/cacador · caçador de props (filtros prontos ou o seu)
+/sequencias · quem vem batendo uma linha há 5+ jogos
+/arbitros · árbitros do dia: faltas, cartões e rigor
 
 <b>Rodada</b>
 /jogos · /desfalques · /resumo
@@ -810,6 +1026,7 @@ const MENU = { inline_keyboard: [
   [BTN('🧤 Defesas', '/defesas'), BTN('🏟️ Times', '/times'), BTN('➕ Totais', '/totais')],
   [BTN('🗓️ Jogos', '/jogos'), BTN('🚑 Desfalques', '/desfalques'), BTN('📋 Resumo', '/resumo')],
   [BTN('🎯 Top 10 Chutes', '/topchutes'), BTN('🧱 Top 10 Faltas', '/topfaltas')],
+  [BTN('🕵️ Caçador', '/cacador'), BTN('🔥 Sequências', '/sequencias'), BTN('🟨 Árbitros', '/arbitros')],
   [BTN('🧠 Modelo BH', '/modelo'), BTN('📒 Testes', '/testes'), BTN('📬 Envio diário', '/receber')],
   [BTN('💼 Banca e ROI', '/banca'), BTN('🧪 Estratégias', '/estrategias'), BTN('🖼️ Cards do dia', '/cards')],
   [{ text: '📱 Abrir o app completo', url: APP_URL }],
@@ -821,6 +1038,7 @@ const HOJE = { inline_keyboard: [
   [BTN('🔥 Top do dia', '/top'), BTN('💰 Valor', '/valor'), BTN('🛡️ Seguras', '/seguras')],
   [BTN('🎯 Top 10 Chutes', '/topchutes'), BTN('🧱 Top 10 Faltas', '/topfaltas')],
   [BTN('🗓️ Jogos', '/jogos'), BTN('🚑 Desfalques', '/desfalques'), BTN('📋 Resumo', '/resumo')],
+  [BTN('🕵️ Caçador', '/cacador'), BTN('🔥 Sequências', '/sequencias'), BTN('🟨 Árbitros', '/arbitros')],
   [BTN('🖼️ Cards do dia', '/cards'), BTN('🎟️ Múltipla', '/multipla 3')], [BTN('☰ Todos os mercados', '/menu')]] };
 const MODELO_HUB = { inline_keyboard: [
   [BTN('🎯 Top 10 Chutes', '/topchutes'), BTN('🧱 Top 10 Faltas', '/topfaltas')],
@@ -854,6 +1072,9 @@ async function answer(text: string, chatId: number, page = 1): Promise<Out> {
   if (cmd === 'app') return { text: `📱 <b>App completo</b>\n${APP_URL}`, kb: { inline_keyboard: [[{ text: 'Abrir o app', url: APP_URL }], HOME] } };
   const d = await data();
   if (cmd === 'modelo') return modeloCmd(d, rest, chatId);
+  if (cmd === 'cacador' || cmd === 'hunter') return cacadorCmd(d, rest, page);
+  if (cmd === 'sequencias' || cmd === 'sequencia') return sequenciasCmd(d, rest, page);
+  if (cmd === 'arbitros' || cmd === 'arbitro') return arbitrosCmd(d, page);
   if (cmd === 'topchutes' || cmd === 'topfaltas') { const k = cmd === 'topfaltas' ? 'faltas' : 'chutes'; const T = MT[k]; return list(d, tops(d)[k], `${T.ic} TOP 10 MODELO BH · ${T.title}`, 10, raw, page, true, 'O Modelo BH ainda não rodou para os jogos de hoje, ou não há titulares prováveis com linha boa.', d.rows.some(r => r.d) ? ' · melhor casa' : ' · linha de referência'); }
   if (cmd === 'top') { const n = clampN(rest[0]); return list(d, open(d).filter(inRange), `🔥 TOP ${n} DO DIA`, n, raw, page, true, '', RANGE_TXT); }
   if (cmd === 'valor') return list(d, open(d).filter(r => r.d && r.e != null && r.e >= .03 && r.e <= .15 && inRange(r)).sort((a, b) => (b.e! - a.e!)), '💰 VALOR COM ODD DE CASA', clampN(rest[0]), raw, page, true, '⏳ As odds entram quando as casas abrem as linhas e o leitor manda a foto. Tente mais perto dos jogos ou veja o Top do dia.', RANGE_TXT);
@@ -1023,7 +1244,7 @@ Deno.serve(async (req: Request) => {
     const cmds = await TG('setMyCommands', { commands: [
       ['top', 'Melhores do dia (ex.: /top 20)'], ['valor', 'Valor com odd de casa'], ['seguras', 'Chance de 65% ou mais'], ['chutes', 'Chutes'], ['nogol', 'Chutes ao gol'], ['primeiro', 'Chutes no 1º tempo'],
       ['faltas', 'Faltas cometidas'], ['sofridas', 'Faltas sofridas'], ['desarmes', 'Desarmes'], ['defesas', 'Defesas do goleiro'], ['times', 'Mercados de time'], ['totais', 'Totais do jogo'],
-      ['jogo', 'Linhas de um jogo'], ['jogador', 'Linhas de um jogador'], ['multipla', 'Múltipla (ex.: /multipla 3)'], ['jogos', 'Jogos de hoje'], ['desfalques', 'Desfalques'], ['resumo', 'Resumo da rodada'],
+      ['jogo', 'Linhas de um jogo'], ['jogador', 'Linhas de um jogador'], ['cacador', 'Caçador de props (filtros)'], ['sequencias', 'Sequências de 5+ jogos'], ['arbitros', 'Árbitros do dia'], ['multipla', 'Múltipla (ex.: /multipla 3)'], ['jogos', 'Jogos de hoje'], ['desfalques', 'Desfalques'], ['resumo', 'Resumo da rodada'],
       ['cards', 'Melhores do dia em imagem'], ['modelo', 'Modelo BH: chance de qualquer linha'], ['testes', 'Testes do Modelo BH'], ['topchutes', 'Top 10 do modelo em chutes'], ['topfaltas', 'Top 10 em faltas e desarmes'],
       ['receber', 'Receber os tops todo dia'], ['banca', 'Entradas registradas, lucro e ROI'], ['ontem', 'Resultado de ontem'], ['estrategias', 'Modelo por mercado: placar e entradas'], ['gabarito', 'Gabarito de ontem por mercado'],
       ['hoje', 'Listas de hoje'], ['ajuda', 'Todos os comandos'], ['app', 'Abrir o app']].map(([command, description]) => ({ command, description })) });

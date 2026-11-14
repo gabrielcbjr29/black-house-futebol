@@ -25,7 +25,7 @@
       <div><b>Black House</b><small>props futebol</small></div>
     </a>
     <nav class="tabs" aria-label="Seções">
-      <a href="#entradas">Entradas</a><a href="#jogos">Jogos</a><a href="#estrategias">Estratégias</a><a href="#guia">Guia</a>
+      <a href="#entradas">Entradas</a><a href="#cacador">Caçador</a><a href="#jogos">Jogos</a><a href="#estrategias">Estratégias</a><a href="#guia">Guia</a>
     </nav>
     <span class="pill" id="dataPill">Carregando…</span>
   </div>
@@ -39,10 +39,34 @@
       <select id="fMk" aria-label="Mercado"><option value="">Todos os mercados</option></select>
       <select id="fGame" aria-label="Jogo"><option value="">Todos os jogos</option></select>
       <label class="chk"><input type="checkbox" id="fOdd"> Só com odd de casa</label>
+      <select id="fSort" aria-label="Ordem"><option value="nt">Ordem: Nota BH</option><option value="e">Ordem: EV</option><option value="p">Ordem: chance</option><option value="sk">Ordem: sequência 🔥</option></select>
       <label class="chk"><input type="checkbox" id="fOne" checked> 1 por jogador</label>
     </div>
     <p class="hint" id="countHint"></p>
     <div id="list" class="list" aria-live="polite"></div>
+  </section>
+
+  <section id="v-cacador" class="view" hidden>
+    <div class="presets" id="hPresets"></div>
+    <div class="hunt">
+      <label>Mercado <select id="hMk"></select></label>
+      <label>Linha <select id="hL"></select></label>
+      <label>Janela <select id="hW"><option value="5">L5</option><option value="10">L10</option><option value="15">L15</option><option value="20">L20</option></select></label>
+      <label>Acerto mínimo <span class="rng"><input id="hPct" type="range" min="30" max="100" step="5"><output id="hPctO"></output></span></label>
+      <fieldset class="seg" id="hPos"><legend>Posição</legend>
+        <label><input type="checkbox" value="G"> Goleiro</label><label><input type="checkbox" value="D"> Defensor</label><label><input type="checkbox" value="M"> Meia</label><label><input type="checkbox" value="F"> Atacante</label></fieldset>
+      <details class="more"><summary>Mais filtros</summary><div class="more-in">
+      <label>Mando <select id="hVenue"><option value="">Todos os jogos</option><option value="casa">Só em casa (e hoje em casa)</option><option value="fora">Só fora (e hoje fora)</option></select></label>
+      <label>Jogos contados <select id="hTit"><option value="60">Titular, 60+ min</option><option value="75">Titular, 75+ min</option><option value="1">Todos em que entrou</option></select></label>
+      <label>Odd mínima <input id="hOdd" inputmode="decimal" placeholder="1,80"></label>
+      <label>Jogou nos últimos <select id="hGap"><option value="0">qualquer</option><option value="1">1 jogo do time</option><option value="3">3 jogos do time</option><option value="5">5 jogos do time</option></select></label>
+      <label class="chk"><input type="checkbox" id="hLiga"> Só a mesma competição de hoje</label>
+      <label class="chk"><input type="checkbox" id="hConf"> Só titular confirmado</label>
+      </div></details>
+    </div>
+    <p class="hint" id="hHint"></p>
+    <div id="hList" class="list" aria-live="polite"></div>
+    <p class="hint">⚠️ Acerto passado não é chance futura. A lista vem ordenada pelo EV (com odd de casa) e pela chance do Modelo BH; ⚠️ marca quem tem histórico bem acima do modelo.</p>
   </section>
 
   <section id="v-jogos" class="view" hidden><div id="games" class="games"></div></section>

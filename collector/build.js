@@ -7,7 +7,7 @@ import { LEAGUE_IDS, dayBR } from '../config/leagues.js';
 import { client } from './apifootball.js';
 import { pool } from './http.js';
 import { loadHistory } from './history.js';
-import { buildModel, buildProfiles } from './model.js';
+import { buildModel, buildProfiles, refKey } from './model.js';
 import { finishBot } from './bot.js';
 import { buildResults } from './results.js';
 
@@ -58,7 +58,9 @@ async function main() {
   const prof = buildProfiles(H);
   const open = games.filter(g => !DONE.has(g.status));
   const model = buildModel(open, H, prof, injuries);
-  const slate = { date, gen: new Date().toISOString(), games, injuries, inj, model, api: { used: api.st.used, remaining: api.st.remaining }, hist: H.fixtures.length };
+  // árbitros de hoje: faltas e cartões por jogo no histórico
+  const refs = Object.fromEntries(open.filter(g => g.ref).map(g => [g.ref, prof.RF[refKey(g.ref)] ?? null]));
+  const slate = { date, gen: new Date().toISOString(), games, injuries, inj, model, refs, api: { used: api.st.used, remaining: api.st.remaining }, hist: H.fixtures.length };
   mkdirSync(OUT, { recursive: true });
   writeFileSync(new URL('slate.json', OUT), JSON.stringify(slate));
   writeFileSync(new URL('results.json', OUT), JSON.stringify(buildResults(H)));

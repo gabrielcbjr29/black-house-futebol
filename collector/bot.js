@@ -16,7 +16,9 @@ export async function finishBot(slate) {
   } catch (e) { console.log('casas: falhou (' + e.message + ')'); }
   const bot = buildBotData(slate, lines, { houses: houses.map(h => ({ house: h.house, at: h.taken_at, n: h.payload.lines.length })) });
   bot.miss = miss.slice(0, 50).map(m => ({ house: m.house, why: m.why, x: m.x }));
-  writeFileSync(new URL('bot.json', OUT), JSON.stringify(bot));
+  const { hunt, ...rest } = bot;
+  writeFileSync(new URL('bot.json', OUT), JSON.stringify(rest));
+  writeFileSync(new URL('hunt.json', OUT), JSON.stringify(hunt));
   const st = pickStrategies(bot);
   writeFileSync(new URL('strategies.json', OUT), JSON.stringify(st));
   console.log(`bot.json: ${bot.rows.length} linhas (${bot.rows.filter(r => r.d).length} com odd de casa) · estratégias: ${st.picks.length} entradas`);
