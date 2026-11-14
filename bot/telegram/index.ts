@@ -1019,6 +1019,36 @@ ${tdLines(r)}
 }
 
 
+// ---------- 🔐 Acesso: bot fechado por lista de IDs (ALLOWED_CHATS em bot_config; o primeiro é o administrador) ----------
+async function setAllowed(list: string[]) {
+  await sb('bot_config?on_conflict=key', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ key: 'ALLOWED_CHATS', value: [...new Set(list)].join(',') }) });
+  CFG = null;
+}
+async function acessoCmd(cmd: string, rest: string[], chatId: number): Promise<Out> {
+  const allowed = (await cfg()).allowed;
+  const kb = { inline_keyboard: [[BTN('👥 Acessos', '/acessos')], HOME] };
+  if (allowed.length && allowed[0] !== String(chatId)) return { text: 'Só o administrador do bot pode liberar ou bloquear acessos.', kb: { inline_keyboard: [HOME] } };
+  const id = String(rest[0] ?? '').replace(/[^0-9-]/g, '');
+  if (cmd === 'acessos') {
+    const reqs: any[] = await sb('bot_config?key=like.REQ:*&select=key,value').catch(() => []) ?? [];
+    const pend = reqs.filter(r => !allowed.includes(r.key.slice(4)));
+    return { text: `<b>👥 ACESSOS</b>\n<i>Bot fechado por lista. O primeiro ID é o administrador.</i>\n\n<b>Liberados (${allowed.length})</b>\n${allowed.map((a, i) => `${i ? '•' : '👑'} <code>${a}</code>`).join('\n') || '–'}${pend.length ? `\n\n<b>Pedidos</b>\n${pend.map(r => `• ${esc(r.value)} · <code>${r.key.slice(4)}</code>`).join('\n')}` : ''}\n\n<code>/liberar ID</code> · <code>/bloquear ID</code>`,
+      kb: { inline_keyboard: [...pend.slice(0, 6).map(r => [BTN(`✅ Liberar ${r.value}`.slice(0, 40), `/liberar ${r.key.slice(4)}`)]), HOME] } };
+  }
+  if (!id) return { text: `Uso: <code>/${cmd} 123456789</code> (o ID aparece para a pessoa quando ela tenta usar o bot).`, kb };
+  if (cmd === 'liberar') {
+    await setAllowed([...(allowed.length ? allowed : [String(chatId)]), id]);
+    // quem é liberado já entra recebendo tudo
+    await sb('bot_subs?on_conflict=chat_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ chat_id: +id, est: true, top: true, chutes: true, faltas: true }) }).catch(() => null);
+    await TG('sendMessage', { chat_id: +id, parse_mode: 'HTML', text: '✅ <b>Acesso liberado!</b>\nVocê já recebe os tops do dia, as entradas das estratégias e os alertas. Para escolher o que receber, use /receber. Toque em /start para abrir o menu.\n\n<i>🔞 18+ · Aposte com responsabilidade.</i>' }).catch(() => null);
+    return { text: `✅ ID <code>${id}</code> liberado e já inscrito em tudo.`, kb };
+  }
+  if (id === allowed[0]) return { text: 'O administrador não pode ser bloqueado.', kb };
+  await setAllowed(allowed.filter(a => a !== id));
+  await sb(`bot_subs?chat_id=eq.${id}`, { method: 'DELETE' }).catch(() => null);
+  return { text: `🚫 ID <code>${id}</code> bloqueado e removido dos envios.`, kb };
+}
+
 // ---------- 🚨 Alerta por entrada (chamado pela função das estratégias) ----------
 // Uma mensagem por entrada: card em imagem no topo e a análise completa embaixo, com Registrar e Copiar.
 // Madrugada (0h–8h de Brasília) chega sem som.
@@ -1169,6 +1199,7 @@ async function answer(text: string, chatId: number, page = 1): Promise<Out> {
   if (cmd === 'modelo') return modeloCmd(d, rest, chatId);
   if (cmd === 'cacador' || cmd === 'hunter') return cacadorCmd(d, rest, page);
   if (cmd === 'tendencia' || cmd === 'tendencias') return tendenciaCmd(d);
+  if (cmd === 'liberar' || cmd === 'bloquear' || cmd === 'acessos') return acessoCmd(cmd, rest, chatId);
   if (cmd === 'sequencias' || cmd === 'sequencia') return sequenciasCmd(d, rest, page);
   if (cmd === 'arbitros' || cmd === 'arbitro') return arbitrosCmd(d, page);
   if (cmd === 'topchutes' || cmd === 'topfaltas') { const k = cmd === 'topfaltas' ? 'faltas' : 'chutes'; const T = MT[k]; return list(d, tops(d)[k], `${T.ic} TOP 10 MODELO BH · ${T.title}`, 10, raw, page, true, 'O Modelo BH ainda não rodou para os jogos de hoje, ou não há titulares prováveis com linha boa.', d.rows.some(r => r.d) ? ' · melhor casa' : ' · linha de referência'); }
@@ -1257,12 +1288,21 @@ async function handle(update: any) {
   const allowed = (await cfg()).allowed;
   if (allowed.length && !allowed.includes(String(chatId))) {
     if (cq) await TG('answerCallbackQuery', { callback_query_id: cq.id });
-    await TG('sendMessage', { chat_id: chatId, text: `Este bot é privado. Peça acesso ao dono e informe o seu ID: ${chatId}` });
+    await TG('sendMessage', { chat_id: chatId, parse_mode: 'HTML', text: `🔒 <b>Bot fechado</b>\nO acesso é liberado por lista. Seu ID é <code>${chatId}</code>: já avisei o administrador. Quando ele liberar, você recebe uma mensagem aqui.` });
+    // avisa o administrador uma vez por pessoa (marca REQ:<id>)
+    const k = 'REQ:' + chatId, seen = await sb(`bot_config?key=eq.${k}&select=key`).catch(() => []);
+    if (!seen?.length) {
+      const u = update.message?.from ?? cq?.from ?? {}, who = [u.first_name, u.last_name].filter(Boolean).join(' ') + (u.username ? ` (@${u.username})` : '');
+      await TG('sendMessage', { chat_id: +allowed[0], parse_mode: 'HTML', text: `🔔 <b>Pedido de acesso</b>\n${esc(who || 'sem nome')} · ID <code>${chatId}</code>\nPara liberar: <code>/liberar ${chatId}</code>`,
+        reply_markup: { inline_keyboard: [[{ text: '✅ Liberar', callback_data: `/liberar ${chatId}` }]] } }).catch(() => null);
+      await sb('bot_config?on_conflict=key', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ key: k, value: who || '-' }) }).catch(() => null);
+    }
     return;
   }
   if (!cq && KBMAP[text.trim()]) text = KBMAP[text.trim()];
   if (!cq && /^\/start(@\S+)?(\s|$)/i.test(text)) {
-    await sb('bot_subs?on_conflict=chat_id', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates' }, body: JSON.stringify({ chat_id: chatId }) }).catch(() => null);
+    // quem entra já recebe tudo (tops, estratégias e alertas); dá para desligar listas em /receber
+    await sb('bot_subs?on_conflict=chat_id', { method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates' }, body: JSON.stringify({ chat_id: chatId, est: true, top: true, chutes: true, faltas: true }) }).catch(() => null);
     await TG('sendMessage', { chat_id: chatId, text: '👇 Use os botões aqui embaixo para navegar: <b>Hoje</b>, <b>Modelo BH</b>, <b>Banca</b> e <b>Mais</b>.', parse_mode: 'HTML', reply_markup: RKB });
   }
   // registro de entrada: 📝 (bet/be:<chave>:<origem>), do /modelo (bm:pid:mk:linha), odd por botão (bo:id:odd), cancelar (bx:id)
@@ -1353,7 +1393,7 @@ Deno.serve(async (req: Request) => {
       ['jogo', 'Linhas de um jogo'], ['jogador', 'Linhas de um jogador'], ['cacador', 'Caçador de props (filtros)'], ['tendencia', 'Método Tendência'], ['sequencias', 'Sequências de 5+ jogos'], ['arbitros', 'Árbitros do dia'], ['multipla', 'Múltipla (ex.: /multipla 3)'], ['jogos', 'Jogos de hoje'], ['desfalques', 'Desfalques'], ['resumo', 'Resumo da rodada'],
       ['cards', 'Melhores do dia em imagem'], ['pdf', 'PDF do dia'], ['modelo', 'Modelo BH: chance de qualquer linha'], ['testes', 'Testes do Modelo BH'], ['topchutes', 'Top 10 do modelo em chutes'], ['topfaltas', 'Top 10 em faltas e desarmes'],
       ['receber', 'Receber os tops todo dia'], ['banca', 'Entradas registradas, lucro e ROI'], ['ontem', 'Resultado de ontem'], ['estrategias', 'Modelo por mercado: placar e entradas'], ['gabarito', 'Gabarito de ontem por mercado'],
-      ['hoje', 'Listas de hoje'], ['ajuda', 'Todos os comandos'], ['app', 'Abrir o app']].map(([command, description]) => ({ command, description })) });
+      ['hoje', 'Listas de hoje'], ['acessos', 'Acessos ao bot (administrador)'], ['ajuda', 'Todos os comandos'], ['app', 'Abrir o app']].map(([command, description]) => ({ command, description })) });
     const me = await TG('getMe', {}), info = await TG('getWebhookInfo', {});
     return json({ ok: !!hook.ok, webhook: hook, endereco: info.result?.url, erro_recente: info.result?.last_error_message ?? null, comandos: cmds.ok, bot: me.result?.username ? '@' + me.result.username : null });
   }
