@@ -87,7 +87,7 @@ export function mergeLines(houses, slate) {
     if (x.type === 'player') keyHouse.push([key, h.house, `${h.house}|${g.id}|${target}`, x]);
     const arr = out.get(key) ?? out.set(key, []).get(key);
     const prev = arr.find(a => a.house === h.house);
-    if (prev) prev.odd = Math.max(prev.odd, odd); else arr.push({ house: HOUSE_NAME[h.house] ?? h.house, odd });
+    if (prev) prev.odd = Math.max(prev.odd, odd); else arr.push({ house: HOUSE_NAME[h.house] ?? h.house, odd, at: h.taken_at ?? null });
   }
   // dois nomes diferentes da mesma casa caindo no mesmo jogador (ex.: dois "Carlos Eduardo"): não dá para saber qual é
   for (const [key, house, ck, x] of keyHouse) {

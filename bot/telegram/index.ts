@@ -37,7 +37,7 @@ const TG = async (m: string, body: unknown) => { const c = await cfg(); return f
 
 type Row = { id: string; n: string; t: string; o: string; home: boolean; g: number; lg: number; utc: string; fase: string; k: 'p' | 't' | 'j'; pos?: string; ps?: number; st?: string; ms?: number;
   m: string; s: 'o' | 'u'; l: number; p: number; d: number | null; b: string | null; of?: [string, number][]; e: number | null; pj: number; ps1?: number; sq?: number[]; jh?: number[]; ja?: number[];
-  hit: [number, number] | null; h5: [number, number] | null; sk?: number; cx?: number; nt: number; gr: string; ref?: 1; cd?: 1; td?: any;
+  hit: [number, number] | null; h5: [number, number] | null; sk?: number; cx?: number; nt: number; gr: string; ref?: 1; cd?: 1; td?: any; at?: string;
   ex?: { p90?: number | null; sa?: number | null; ns?: number; hm?: number | null; nh?: number; aw?: number | null; na?: number; oa?: number | null; op?: number | null; pa?: number | null; np?: number } };
 type MPlayer = { n: string; t: number; tn: string; on: string; home: boolean; g: number; lg?: number; gap?: number; utc: string; pos: string; ps: number; pb: number; st: string; ms: number; mu: Record<string, [number, number]>; sq: Record<string, number[]> };
 type Game = { id: number; lg: number; utc: string; st: string; h: string; a: string; hid: number; aid: number; fase: string; ref: string | null };
@@ -163,6 +163,10 @@ function hitsTxt(r: Row) {
   if (/1$/.test(r.m)) return '📊 <i>1º tempo: sem histórico por jogador; a chance usa a fatia do 1º tempo da liga</i>';
   return `📊 L5 ${hitTxt(r.h5)} · L10 ${hitTxt(r.hit)}${r.k === 'p' ? ' <i>como titular</i>' : ''}${seq(r) ? `\n${sqLine(r.sq, r.l, r.s === 'u')} · <i>${seq(r)}</i>` : ''}`;
 }
+// odd lida há 2 h ou mais (leitor parado): avisa para conferir
+const STALE = 2 * 3600e3;
+const whenBR = (iso: string) => { const d = new Date(iso), same = dayBR(d.getTime()) === dayBR(); return (same ? '' : new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' }).format(d) + ' ') + hourBR(iso); };
+const staleTx = (r: Row) => r.d && r.at && Date.now() - Date.parse(r.at) >= STALE ? `\n⏱️ <b>Odd lida às ${whenBR(r.at)}</b>, confira antes` : '';
 const oddTxt = (r: Row) => r.d ? `💵 <code>@${n2(r.d)}</code> ${esc(r.b ?? '')}${r.of && r.of.length > 1 ? ` <i>(+${r.of.length - 1} casa${r.of.length > 2 ? 's' : ''})</i>` : ''}` : `💵 odd justa <code>@${n2(1 / r.p)}</code> <i>(sem casa)</i>`;
 const evTxt = (r: Row) => r.e == null ? '' : ` · EV <b>${r.e >= 0 ? '+' : ''}${(r.e * 100).toFixed(1).replace('.', ',')}%</b>`;
 // cartão das listas
@@ -199,7 +203,7 @@ function card(d: Data, r: Row, i?: number, opt: { td?: boolean } = {}) {
   return `<blockquote>${whoB(r, i)}  <i>${LG[r.lg]?.[0] ?? ''} ${esc(vsTxt(r))} · ${hourBR(r.utc)}</i>
 ${r.s === 'u' ? '⬇️ <b>Menos' : '⬆️ <b>Mais'} de ${n1(r.l)}</b> ${MK[r.m] ?? r.m}
 ${GRADE[r.gr] ?? r.gr} · Nota <b>${r.nt}</b>  ${bar(r.p)} <b>${pc(r.p)}</b>
-${oddTxt(r)}${opt.td ? ' · 📈 <i>sinal da sequência, não do modelo</i>' : evTxt(r)}${casas}${refl}
+${oddTxt(r)}${opt.td ? ' · 📈 <i>sinal da sequência, não do modelo</i>' : evTxt(r)}${staleTx(r)}${casas}${refl}
 ${hitsTxt(r)}
 🧠 Modelo BH <b>${n1(r.pj)}</b>${r.k === 'p' && r.st ? ' · ' + STL(r) : ''}${mins}${nums}${ctxTxt(r)}${ref}</blockquote>${why.length ? `\n<blockquote expandable><b>Por que sim / por que não</b>\n${why.join('\n')}</blockquote>` : ''}`;
 }

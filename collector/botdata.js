@@ -44,7 +44,8 @@ export function buildBotData(slate, lines = new Map(), { houses = [] } = {}) {
       const h10 = hitsSide(v.slice(0, 10), c.line, u), h5 = hitsSide(v.slice(0, 5), c.line, u);
       const nt = notaBH({ p, e, hit: h10 && h10[1] >= 3 ? h10[0] / h10[1] : null, ctx: u ? 1 / (extra.ctx || 1) : extra.ctx, cert: extra.cert });
       const td = best && extra.td ? extra.td(c.line, u) : undefined;
-      (u ? rowsU : rows).push({ ...base, m: mk, s: side, l: c.line, p: r3(p), d: best?.odd ?? null, b: best?.house ?? null,
+      // at = hora da leitura da odd (a da melhor casa): com 2 h ou mais, o bot e o PDF avisam para conferir
+      (u ? rowsU : rows).push({ ...base, m: mk, s: side, l: c.line, p: r3(p), d: best?.odd ?? null, b: best?.house ?? null, at: best?.at ?? undefined,
         of: c.offers.length > 1 ? c.offers.map(o => [o.house, o.odd]) : undefined, e: e == null ? null : r3(e),
         hit: h10, h5, sk: v.length ? (u ? streak(v.map(x => -x), -c.line) : streak(v, c.line)) : undefined, nt, gr: grade(nt), ref: c.offers.length ? undefined : 1, td });
     }

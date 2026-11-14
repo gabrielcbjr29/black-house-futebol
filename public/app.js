@@ -27,7 +27,9 @@ function spark(r) {
 function card(r, i) {
   const st = r.k === 'p' && r.st ? STL[r.st] : null;
   const who = r.k === 'p' ? `${esc(r.n)}` : r.k === 't' ? `${esc(r.n)} <small class="meta">time</small>` : `${esc(r.n)}`;
-  const odd = r.d ? `<span class="odd">@${n2(r.d)} <small>${esc(r.b)}${r.of?.length > 1 ? ` +${r.of.length - 1}` : ''}</small></span>` : `<span class="odd"><small>justa</small> @${n2(1 / r.p)}</span>`;
+  // odd lida há 2 h ou mais (leitor parado): avisa para conferir
+  const stale = r.d && r.at && Date.now() - Date.parse(r.at) >= 2 * 3600e3 ? ` <small class="stale" title="Odd lida às ${hour(r.at)}: confira antes">⏱️ ${hour(r.at)}</small>` : '';
+  const odd = r.d ? `<span class="odd">@${n2(r.d)} <small>${esc(r.b)}${r.of?.length > 1 ? ` +${r.of.length - 1}` : ''}</small>${stale}</span>` : `<span class="odd"><small>justa</small> @${n2(1 / r.p)}</span>`;
   const g = r.gr === 'A+' ? 'ap' : r.gr === 'A' ? 'a' : '';
   return `<button class="card" data-i="${i}">
     <div class="who"><b>${who}</b><span class="grade ${g}">${r.gr} · ${r.nt}</span></div>

@@ -88,6 +88,8 @@ async function alert(fresh: any[], evMin: number) {
 // grava as entradas do dia. A ENTRADA vale na linha e odd do momento do alerta (open_line/open_odd, guardadas pelo
 // gatilho); line/odd seguem atualizadas até o jogo e viram o fechamento (CLV).
 async function record(silent = false) {
+  // leitor parado/voltou: confere toda rodada, mesmo em dia sem jogo
+  const leit = silent ? [] : await leitores().catch(e => ['erro: ' + String(e)]);
   const st = await getJ('strategies.json');
   if (!st?.picks) return { ok: false, erro: 'strategies.json indisponível' };
   if (st.demo) return { ok: true, skip: 'dados de demonstração' };
@@ -125,7 +127,27 @@ async function record(silent = false) {
   const bot = await getJ('bot.json').catch(() => null);
   const risk = bot?.date === st.date ? await risco(bot).catch(e => ({ erro: String(e) })) : { skip: 'bot.json de outro dia' };
   const lu = bot?.date === st.date && !silent ? await escalacao(bot).catch(e => ({ erro: String(e) })) : { skip: 'sem bot.json do dia' };
-  return { ok: true, date: st.date, atualizadas: rows.length, novas: fresh.length, alertadas: toAlert.length, alertas, risco: risk, escalacao: lu };
+  return { ok: true, date: st.date, atualizadas: rows.length, novas: fresh.length, alertadas: toAlert.length, alertas, risco: risk, escalacao: lu, leitores: leit };
+}
+
+// ---------- ⏱️ Leitor de odds parado: avisa uma vez quando uma casa fica 2 h+ sem leitura e outra quando volta ----------
+async function leitores() {
+  const rows: any[] = await sb('rpc/latest_lines', { method: 'POST', body: '{}' }).catch(() => []) ?? [];
+  const flags: any[] = await sb('bot_config?key=like.LEITOR:*&select=key,value').catch(() => []) ?? [];
+  const flag = Object.fromEntries(flags.map(f => [f.key.slice(7), f.value])), out: string[] = [];
+  const NAME: Record<string, string> = { '99play': '99play', farra: 'Farra' };
+  for (const r of rows) {
+    const age = Date.now() - Date.parse(r.taken_at), stopped = age >= 2 * 3600e3, was = flag[r.house] === 'parado';
+    if (stopped === was) continue;
+    const nm = NAME[r.house] ?? r.house, t = hourBR(r.taken_at);
+    const text = stopped
+      ? `⏱️ <b>Leitor da ${esc(nm)} parado</b>\nÚltima leitura às <b>${t}</b> (há ${Math.floor(age / 3600e3)} h). Sigo o dia com essa leitura: as entradas e alertas mostram "⏱️ odd lida às ${t}, confira antes". Sem odd nova, não invento odd para alertar.\n<i>Confira se o computador está ligado e a aba da ${esc(nm)} aberta.</i>`
+      : `✅ <b>Leitor da ${esc(nm)} voltou</b>\nLeitura nova às <b>${t}</b>.`;
+    await send(text, { inline_keyboard: [[{ text: '🧪 Placar', callback_data: '/estrategias' }]] });
+    await sb('bot_config?on_conflict=key', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ key: 'LEITOR:' + r.house, value: stopped ? 'parado' : 'ok' }) });
+    out.push(`${r.house}:${stopped ? 'parado' : 'voltou'}`);
+  }
+  return out;
 }
 
 // ---------- 📋 Alerta de escalação: quando a escalação oficial de um jogo sai, uma mensagem por jogo com as entradas

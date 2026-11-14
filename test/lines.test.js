@@ -19,7 +19,7 @@ test('encaixe das linhas no modelo, com a melhor odd entre as casas', () => {
     model: { players: { 1460: { n: 'B. Saka', g: 1 }, 1100: { n: 'Gabriel Jesus', g: 1 } } } };
   const ln = (house, odd, extra) => ({ house, taken_at: new Date().toISOString(), payload: { lines: [{ home: 'Arsenal FC', away: 'Chelsea', utc: '2026-11-14T15:00:00Z', type: 'player', player: 'Bukayo Saka', mk: 'SOT', line: 0.5, odd, ...extra }] } });
   const { lines, miss } = mergeLines([ln('a', 1.8), ln('b', 1.95), ln('b', 2.2, { player: 'Fulano Inexistente' }), { house: 'c', payload: { lines: [{ home: 'Chelsea', away: 'Arsenal', type: 'match', mk: 'JSH', line: 21.5, odd: 1.9 }] } }], slate);
-  assert.deepEqual(lines.get('1|1460|SOT|0.5'), [{ house: 'b', odd: 1.95 }, { house: 'a', odd: 1.8 }]);
+  assert.deepEqual(lines.get('1|1460|SOT|0.5').map(({ house, odd }) => ({ house, odd })), [{ house: 'b', odd: 1.95 }, { house: 'a', odd: 1.8 }]);
   assert.equal(miss.filter(m => m.why === 'jogador').length, 1);
   // mando invertido não encaixa (casa e fora trocados = outro jogo)
   assert.equal(lines.has('1|j1|JSH|21.5'), false);
@@ -102,4 +102,10 @@ test('linhas de MENOS de time viram rowsU (fora das listas do bot)', () => {
   assert.ok(o && u && u.s === 'u');
   assert.ok(Math.abs(o.p + u.p - 1) < 0.002);
   assert.equal(b.rows.filter(r => r.s === 'u').length, 0);
+});
+test('cada linha guarda a hora da leitura da casa (aviso de odd antiga)', () => {
+  const slate = { games: [{ id: 7, utc: '2026-11-14T23:30:00Z', home: { id: 1, name: 'Chapecoense' }, away: { id: 2, name: 'Vasco' } }], model: { players: { 20: { n: 'David', t: 2, g: 7 } } } };
+  const { lines } = mergeLines([{ house: 'farra', taken_at: '2026-11-14T03:43:47Z', payload: { lines: [{ home: 'Chapecoense', away: 'Vasco', type: 'player', player: 'David Correa da Fonseca', team: 'Vasco', mk: 'SH', line: 0.5, odd: 2 }] } }], slate);
+  assert.equal(lines.get('7|20|SH|0.5')[0].at, '2026-11-14T03:43:47Z');
+  assert.equal(lines.get('7|20|SH|0.5')[0].house, 'Farra');
 });
