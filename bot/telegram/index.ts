@@ -66,6 +66,20 @@ async function hunt(): Promise<Hunt> {
   return HCACHE.data;
 }
 
+// Raio-X (estatísticas pré-jogo, tendências L x/y e árbitros): raiox.json, só carrega quando alguém usa
+type RXRow = (number | string | null)[];
+type RXT = { g: number; t: number; k: string; s: string; side: string; l: number; x: number; y: number; v: string; b?: number; vals: number[] };
+type RX = { date: string; gen: string; tn: Record<string, string>; g: { id: number; lg: number; utc: string; h: number; a: number; ref: string | null; rk: string | null; tm: Record<string, RXRow[]>; h2h: RXRow[]; inj: { n: string; t: string; st: string; why: string }[] }[];
+  rf: Record<string, any>; tr: RXT[]; pt: { pid: string; g: number; mk: string; l: number; x: number; y: number; p90: number | null; vals: number[] }[] };
+let XCACHE: { at: number; data: RX } | null = null;
+async function raiox(): Promise<RX | null> {
+  if (XCACHE && Date.now() - XCACHE.at < 300_000) return XCACHE.data;
+  const r = await fetch((await cfg()).dataUrl.replace(/bot\.json$/, 'raiox.json') + '?t=' + Math.floor(Date.now() / 300_000), { headers: { 'Cache-Control': 'no-cache' } }).catch(() => null);
+  if (!r?.ok) return null;
+  XCACHE = { at: Date.now(), data: await r.json() };
+  return XCACHE.data;
+}
+
 // ---------- textos ----------
 const MK: Record<string, string> = { SH: 'chutes', SOT: 'chutes ao gol', SH1: 'chutes no 1º tempo', SOT1: 'chutes ao gol no 1º tempo', FC: 'faltas cometidas', FS: 'faltas sofridas', TK: 'desarmes', SV: 'defesas',
   TSH: 'chutes do time', TSOT: 'chutes ao gol do time', TFC: 'faltas do time', JSH: 'chutes no jogo', JSOT: 'chutes ao gol no jogo', JFC: 'faltas no jogo' };
@@ -962,7 +976,7 @@ function sequenciasCmd(d: Data, rest: string[], page: number): Out {
   }
   items.sort((a, b) => b.sk - a.sk || b.l - a.l || b.p - a.p);
   const cmd = '/sequencias' + (rest.length ? ' ' + rest.join(' ') : '');
-  const kb0 = [[BTN('Chutes', '/sequencias chutes'), BTN('No gol', '/sequencias nogol'), BTN('Faltas', '/sequencias faltas')], [BTN('Sofridas', '/sequencias sofridas'), BTN('Desarmes', '/sequencias desarmes'), BTN('Defesas', '/sequencias defesas')]];
+  const kb0 = [[BTN('🏟️ Times e jogo', '/sequencias times')], [BTN('Chutes', '/sequencias chutes'), BTN('No gol', '/sequencias nogol'), BTN('Faltas', '/sequencias faltas')], [BTN('Sofridas', '/sequencias sofridas'), BTN('Desarmes', '/sequencias desarmes'), BTN('Defesas', '/sequencias defesas')]];
   if (!items.length) return { text: header(d, '🔥 SEQUÊNCIAS') + '\nNinguém do dia com 5+ jogos seguidos batendo uma linha como titular.\n' + FOOT, kb: { inline_keyboard: [...kb0, HOME] } };
   const pages = Math.ceil(items.length / 10), pg = Math.max(1, Math.min(pages, page)), sl = items.slice((pg - 1) * 10, pg * 10);
   const body = sl.map((x, i) => `<b>${(pg - 1) * 10 + i + 1}. ${esc(x.m.n)}</b> <i>(${esc(x.m.tn)})</i> · ${hourBR(x.m.utc)}
@@ -974,15 +988,79 @@ function sequenciasCmd(d: Data, rest: string[], page: number): Out {
 ` + FOOT, kb: { inline_keyboard: [...kb0, ...(nav.length ? [nav] : []), home(cmd, pg)] } };
 }
 
+// ---------- 🔎 Raio-X do jogo (como a página de jogo do Valuestats, com o nosso histórico) ----------
+const RXS: Record<string, [number, number, string]> = { g: [5, 6, 'gols'], sh: [7, 8, 'chutes'], sot: [9, 10, 'chutes ao gol'], fc: [11, 12, 'faltas'], cor: [13, 14, 'escanteios'], yc: [15, 16, 'amarelos'], sh1: [17, 18, 'chutes no 1º tempo'] };
+const rxv = (r: RXRow, s: string, k: string) => { const [f, a] = RXS[s]; const x = r[f] as number | null, y = r[a] as number | null; return x == null || y == null ? null : k === 'j' ? x + y : k === 'c' ? x - y : x; };
+const rxAvg = (rs: RXRow[], s: string, k = 't', a = false) => { const v = rs.map(r => a ? r[RXS[s][1]] as number | null : rxv(r, s, k)).filter(x => x != null) as number[]; return v.length ? v.reduce((p, q) => p + q, 0) / v.length : null; };
+const rxPct = (rs: RXRow[], s: string, k: string, l: number) => { const v = rs.map(r => rxv(r, s, k)).filter(x => x != null) as number[]; return v.length ? `${Math.round(v.filter(x => x > l).length / v.length * 100)}% <i>(${v.filter(x => x > l).length}/${v.length})</i>` : '–'; };
+const nl = (x: number) => String(x).replace('.', ',');
+function trTxt(t: RXT, team: string) {
+  const where = t.v === 'casa' ? ' em casa' : t.v === 'fora' ? ' fora' : '', fq = `<b>${t.x}/${t.y}</b>${where}`;
+  if (t.k === 'c') return `${esc(team)} com ${t.side === 'o' ? 'mais' : 'menos'} ${RXS[t.s][2]} que o adversário · ${fq}`;
+  const w = `${t.side === 'o' ? 'mais' : 'menos'} de ${nl(t.l)} ${RXS[t.s][2]}`;
+  return t.k === 'j' ? `Jogo com ${w} <i>(jogos do ${esc(team)})</i> · ${fq}` : `${esc(team)} com ${w} · ${fq}`;
+}
+async function raioxCmd(d: Data, rest: string[]): Promise<Out> {
+  const X = await raiox();
+  if (!X) return { text: '🔎 O Raio-X ainda não foi publicado. Tente depois da próxima atualização.', kb: { inline_keyboard: [HOME] } };
+  const live = X.g.filter(g => Date.parse(g.utc) > Date.now() - 150 * 6e4);
+  const pick = { inline_keyboard: [...live.map(g => [BTN(`🔎 ${hourBR(g.utc)} ${X.tn[g.h]} x ${X.tn[g.a]}`, `/raiox ${g.id}`)]), HOME] };
+  const q = norm(rest[0] ?? '');
+  const g = q ? X.g.find(x => String(x.id) === q) ?? X.g.find(x => norm(X.tn[x.h]).includes(q) || norm(X.tn[x.a]).includes(q)) : null;
+  if (!g) return { text: `<b>🔎 RAIO-X DO JOGO</b>\nMédias, % nas linhas mais comuns, tendências, árbitro e desfalques de cada jogo de hoje.${q ? `\n\nNão achei <b>${esc(rest[0])}</b>.` : ''}\n\nEscolha o jogo:`, kb: pick };
+  const n = [5, 10, 20].includes(+rest[1]) ? +rest[1] : 10, all = rest[2] === 'todos';
+  const H = X.tn[g.h], A = X.tn[g.a];
+  const sh = (g.tm[g.h] ?? []).filter(r => all || r[3] === 1).slice(0, n), sa = (g.tm[g.a] ?? []).filter(r => all || r[3] === 0).slice(0, n);
+  const f1 = (x: number | null) => x == null ? '–' : (Math.round(x * 10) / 10).toString().replace('.', ',');
+  const med = ['sh', 'sot', 'fc', 'cor', 'yc', 'g'].map(s => `${RXS[s][2].padEnd(13)} ${(f1(rxAvg(sh, s)) + '/' + f1(rxAvg(sh, s, 't', true))).padStart(9)} ${(f1(rxAvg(sa, s)) + '/' + f1(rxAvg(sa, s, 't', true))).padStart(9)}`).join('\n');
+  const lines: [string, number][] = [['sh', 22.5], ['sh', 24.5], ['sot', 7.5], ['fc', 22.5], ['fc', 24.5], ['cor', 9.5], ['yc', 4.5], ['g', 2.5]];
+  const bet = lines.map(([s, l]) => `Mais de ${nl(l)} ${RXS[s][2]}: <b>${rxPct(sh, s, 'j', l)}</b> · <b>${rxPct(sa, s, 'j', l)}</b>`).join('\n');
+  const tr = X.tr.filter(t => t.g === g.id).sort((a, b) => (b.b ?? 0) - (a.b ?? 0) || b.y - a.y).slice(0, 10).map(t => `${t.b ? '✅ ' : '• '}${trTxt(t, X.tn[t.t])}`).join('\n');
+  const R = g.rk ? X.rf[g.rk] : null, S = R?.all, L = R?.lg ?? {};
+  const ref = g.ref ? `\n<b>🟨 Árbitro: ${esc(g.ref)}</b>\n${S ? `${f1(S.fc)} faltas/jogo (liga ${f1(L.fc)}) · ${f1(S.yc)} amarelos/jogo (liga ${f1(L.yc)})\n5+ amarelos em ${Math.round(S.o45 * 100)}% · os dois times levam amarelo em ${Math.round(S.b1 * 100)}% · ${S.n} jogos${S.n < 5 ? ' <i>(pouca amostra)</i>' : ''}` : '<i>sem histórico nas nossas ligas</i>'}` : '';
+  const inj = g.inj?.length ? `\n<b>🚑 Desfalques</b>\n${g.inj.map(x => `${x.st === 'out' ? '🔴' : '🟡'} ${esc(x.n)} <i>(${esc(x.t)})</i>`).join('\n')}` : '';
+  const amostra = all ? `últimos ${n} de cada um` : `últimos ${n} do ${esc(H)} em casa e do ${esc(A)} fora`;
+  const text = `<b>🔎 RAIO-X · ${esc(H)} x ${esc(A)}</b>\n<i>${hourBR(g.utc)} · ${amostra}</i>\n
+<b>📊 Médias por jogo</b> <i>(pró/contra)</i>\n<pre>${''.padEnd(13)} ${short(H, 9).padStart(9)} ${short(A, 9).padStart(9)}\n${med}</pre>
+<b>🎯 % dos jogos acima da linha</b> <i>(total do jogo · ${esc(short(H, 12))} · ${esc(short(A, 12))})</i>\n${bet}\n
+${tr ? `<b>🔥 Tendências</b> <i>(✅ = vale também nos jogos do adversário)</i>\n<blockquote expandable>${tr}</blockquote>` : ''}${ref}${inj}
+<i>Escanteios, amarelos e gols são só informação: o modelo e as estratégias ficam em chutes, faltas, desarmes e defesas.</i>` + FOOT;
+  const b = (lb: string, nn: number, al: boolean) => BTN((nn === n && al === all ? '• ' : '') + lb, `/raiox ${g.id} ${nn}${al ? ' todos' : ''}`);
+  return { text, kb: { inline_keyboard: [[b('5', 5, all), b('10', 10, all), b('20', 20, all)], [b('Mando de hoje', n, false), b('Todos os jogos', n, true)],
+    [BTN('📋 Linhas do jogo', `/jogo ${g.id}`), BTN('🔎 Outro jogo', '/raiox')], [{ text: '📱 Raio-X completo no app', url: APP_URL + '#jogos' }], HOME] } };
+}
+
+// 🔥 Sequências de times e do jogo (formato L x/y do Valuestats)
+async function seqTimesCmd(d: Data, page: number): Promise<Out> {
+  const X = await raiox();
+  if (!X) return { text: '🔥 As sequências de times ainda não foram publicadas.', kb: { inline_keyboard: [HOME] } };
+  const live = new Set(X.g.filter(g => Date.parse(g.utc) > Date.now() - 5 * 6e4).map(g => g.id)), G = Object.fromEntries(X.g.map(g => [g.id, g]));
+  const items = X.tr.filter(t => live.has(t.g) && t.x >= 8 && t.k !== 'c' && ['sh', 'sot', 'fc', 'sh1'].includes(t.s)).sort((a, b) => (b.b ?? 0) - (a.b ?? 0) || b.y - a.y || b.x - a.x);
+  const cmd = '/sequencias times';
+  if (!items.length) return { text: header(d, '🔥 SEQUÊNCIAS · TIMES E JOGO') + '\nNenhuma sequência de 8+ hoje em chutes, no gol e faltas.\n' + FOOT, kb: { inline_keyboard: [[BTN('👤 Jogadores', '/sequencias')], HOME] } };
+  const pages = Math.ceil(items.length / 12), pg = Math.max(1, Math.min(pages, page)), sl = items.slice((pg - 1) * 12, pg * 12);
+  const body = sl.map(t => `${t.b ? '✅ ' : '• '}${trTxt(t, X.tn[t.t])}\n   <i>${hourBR(G[t.g].utc)} ${esc(X.tn[G[t.g].h])} x ${esc(X.tn[G[t.g].a])} · ${t.vals.join('-')}</i>`).join('\n');
+  const nav = [pg > 1 ? BTN('◀', `p:${pg - 1}:${cmd}`) : null, pages > 1 ? BTN(`${pg}/${pages}`, `p:${pg}:${cmd}`) : null, pg < pages ? BTN('▶', `p:${pg + 1}:${cmd}`) : null].filter(Boolean) as { text: string; callback_data: string }[];
+  return { text: header(d, '🔥 SEQUÊNCIAS · TIMES E JOGO', ` · ${items.length}`) + `\n<blockquote>${body}</blockquote>
+<i>8/9 = em 8 dos últimos 9 (no máximo 1 erro), no mando de hoje quando dá. ✅ = a do jogo também vale nos jogos do adversário. Sequência é informação, não motivo: confira a linha e a odd (/totais, /times).</i>
+` + FOOT, kb: { inline_keyboard: [...(nav.length ? [nav] : []), [BTN('👤 Jogadores', '/sequencias'), BTN('➕ Totais', '/totais'), BTN('🏟️ Times', '/times')], home(cmd, pg)] } };
+}
+
 // ---------- 🟨 Árbitros do dia ----------
-function arbitrosCmd(d: Data, page = 1): Out {
+// linha extra do Raio-X: distribuição de amarelos e últimos 20
+function refMore(X: RX | null, gid: number) {
+  const g = X?.g.find(x => x.id === gid), R = g?.rk ? X!.rf[g.rk] : null; if (!R?.all) return '';
+  const a = R.all, l = R.l20, L = R.lg ?? {}, p = (x: number) => Math.round(x * 100) + '%';
+  return `\n📊 5+ amarelos em <b>${p(a.o45)}</b> (liga ${L.o45 != null ? p(L.o45) : '–'}) · 4+ em ${p(a.o35)} · os dois levam em ${p(a.b1)}${l && l.n < a.n ? ` · últ. 20: ${n1(l.fc)} faltas, ${n1(l.yc)} amarelos` : ''}`;
+}
+function arbitrosCmd(d: Data, page = 1, X: RX | null = null): Out {
   const gs = d.games.filter(g => g.ref && Date.parse(g.utc) > Date.now() - 5 * 6e4).map(g => ({ g, R: d.refs?.[g.ref!] ?? null }))
     .sort((a, b) => (b.R?.f ?? 1) - (a.R?.f ?? 1));
   const sem = d.games.filter(g => !g.ref && Date.parse(g.utc) > Date.now() - 5 * 6e4).length;
   if (!gs.length) return { text: header(d, '🟨 ÁRBITROS DO DIA') + '\nOs árbitros ainda não foram anunciados para os jogos de hoje.\n' + FOOT, kb: { inline_keyboard: [HOME] } };
   const PG = 10, pages = Math.ceil(gs.length / PG), pg = Math.max(1, Math.min(pages, page));
   const body = gs.slice((pg - 1) * PG, pg * PG).map(({ g, R }) => `⚽ <b>${esc(short(g.h, 16))} x ${esc(short(g.a, 16))}</b> · ${hourBR(g.utc)}${R ? ' · ' + rigor(R.f) : ''}
-🟨 ${esc(refName(g.ref!))}${R ? ` · <b>${n1(R.fpg)}</b> faltas (liga ${n1(R.lfpg)}) · <b>${n1(R.cpg)}</b> cartões · ${R.n}j${R.n < 8 ? ' <i>(poucos jogos)</i>' : ''}` : ' · <i>sem histórico</i>'}`).join('\n');
+🟨 ${esc(refName(g.ref!))}${R ? ` · <b>${n1(R.fpg)}</b> faltas (liga ${n1(R.lfpg)}) · <b>${n1(R.cpg)}</b> cartões · ${R.n}j${R.n < 8 ? ' <i>(poucos jogos)</i>' : ''}` : ' · <i>sem histórico</i>'}${refMore(X, g.id)}`).join('\n');
   const nav = [pg > 1 ? BTN('◀', `p:${pg - 1}:/arbitros`) : null, pages > 1 ? BTN(`${pg}/${pages}`, `p:${pg}:/arbitros`) : null, pg < pages ? BTN('▶', `p:${pg + 1}:/arbitros`) : null].filter(Boolean) as { text: string; callback_data: string }[];
   return { text: header(d, '🟨 ÁRBITROS DO DIA', ` · ${gs.length}`) + `\n<blockquote>${body}</blockquote>
 <i>Faltas e cartões por jogo no histórico (2025 e 2026). 🔴 rigoroso: 7%+ faltas que a média da liga no modelo · 🟢 deixa jogar: 7%+ abaixo. O efeito já entra nas faltas do Modelo BH, puxado para a média quando há poucos jogos.${sem ? ` ${sem} jogo${sem > 1 ? 's' : ''} sem árbitro anunciado.` : ''}</i>
@@ -1109,10 +1187,11 @@ const HELP = `<b>📖 COMANDOS</b>
 <b>Filtros</b>
 /jogo arsenal · /jogador saka
 /cacador · caçador de props (filtros prontos ou o seu)
-/sequencias · quem vem batendo uma linha há 5+ jogos
+/sequencias · quem vem batendo uma linha há 5+ jogos (jogadores, times e jogo)
 /tendencia · método Tendência (sequência + confronto + defesa + odd)
 /pdf · PDF do dia (entradas, maior chance, combinados, múltiplas)
 /arbitros · árbitros do dia: faltas, cartões e rigor
+/raiox · raio-x do jogo: médias, % nas linhas, tendências, árbitro
 
 <b>Rodada</b>
 /jogos · /desfalques · /resumo
@@ -1147,8 +1226,8 @@ const MENU = { inline_keyboard: [
   [BTN('🎯 Chutes', '/chutes'), BTN('🥅 No gol', '/nogol'), BTN('⏱️ 1º tempo', '/primeiro')],
   [BTN('🧱 Faltas', '/faltas'), BTN('🤕 Sofridas', '/sofridas'), BTN('🦶 Desarmes', '/desarmes')],
   [BTN('🧤 Defesas', '/defesas'), BTN('🏟️ Times', '/times'), BTN('➕ Totais', '/totais')],
-  [BTN('🗓️ Jogos', '/jogos'), BTN('🚑 Desfalques', '/desfalques'), BTN('📋 Resumo', '/resumo')],
-  [BTN('🎯 Top 10 Chutes', '/topchutes'), BTN('🧱 Top 10 Faltas', '/topfaltas')],
+  [BTN('🗓️ Jogos', '/jogos'), BTN('🔎 Raio-X', '/raiox'), BTN('🚑 Desfalques', '/desfalques')],
+  [BTN('🎯 Top 10 Chutes', '/topchutes'), BTN('🧱 Top 10 Faltas', '/topfaltas'), BTN('📋 Resumo', '/resumo')],
   [BTN('🕵️ Caçador', '/cacador'), BTN('🔥 Sequências', '/sequencias'), BTN('🟨 Árbitros', '/arbitros')],
   [BTN('📈 Tendência', '/tendencia'), BTN('🧪 Placar', '/estrategias')],
   [BTN('🧠 Modelo BH', '/modelo'), BTN('📒 Testes', '/testes'), BTN('📬 Envio diário', '/receber')],
@@ -1161,10 +1240,10 @@ const HUB = { inline_keyboard: [[BTN('🔥 Hoje', '/hoje'), BTN('🧠 Modelo BH'
 const HOJE = { inline_keyboard: [
   [BTN('🔥 Top do dia', '/top'), BTN('💰 Valor', '/valor'), BTN('🛡️ Seguras', '/seguras')],
   [BTN('🎯 Top 10 Chutes', '/topchutes'), BTN('🧱 Top 10 Faltas', '/topfaltas')],
-  [BTN('🗓️ Jogos', '/jogos'), BTN('🚑 Desfalques', '/desfalques'), BTN('📋 Resumo', '/resumo')],
+  [BTN('🗓️ Jogos', '/jogos'), BTN('🔎 Raio-X', '/raiox'), BTN('🚑 Desfalques', '/desfalques')],
   [BTN('🕵️ Caçador', '/cacador'), BTN('🔥 Sequências', '/sequencias'), BTN('🟨 Árbitros', '/arbitros')],
   [BTN('📈 Tendência', '/tendencia'), BTN('🧪 Placar', '/estrategias'), BTN('📄 PDF', '/pdf')],
-  [BTN('🖼️ Cards do dia', '/cards'), BTN('🎟️ Múltipla', '/multipla 3')], [BTN('☰ Todos os mercados', '/menu')]] };
+  [BTN('🖼️ Cards do dia', '/cards'), BTN('🎟️ Múltipla', '/multipla 3'), BTN('📋 Resumo', '/resumo')], [BTN('☰ Todos os mercados', '/menu')]] };
 const MODELO_HUB = { inline_keyboard: [
   [BTN('🎯 Top 10 Chutes', '/topchutes'), BTN('🧱 Top 10 Faltas', '/topfaltas')],
   [BTN('🧠 Chance de uma linha', '/modelo'), BTN('📒 Meus testes', '/testes')],
@@ -1200,8 +1279,10 @@ async function answer(text: string, chatId: number, page = 1): Promise<Out> {
   if (cmd === 'cacador' || cmd === 'hunter') return cacadorCmd(d, rest, page);
   if (cmd === 'tendencia' || cmd === 'tendencias') return tendenciaCmd(d);
   if (cmd === 'liberar' || cmd === 'bloquear' || cmd === 'acessos') return acessoCmd(cmd, rest, chatId);
+  if ((cmd === 'sequencias' || cmd === 'sequencia') && ['times', 'time', 'jogo'].includes(norm(rest[0] ?? ''))) return seqTimesCmd(d, page);
   if (cmd === 'sequencias' || cmd === 'sequencia') return sequenciasCmd(d, rest, page);
-  if (cmd === 'arbitros' || cmd === 'arbitro') return arbitrosCmd(d, page);
+  if (cmd === 'arbitros' || cmd === 'arbitro') return arbitrosCmd(d, page, await raiox());
+  if (cmd === 'raiox' || cmd === 'raio') return raioxCmd(d, rest);
   if (cmd === 'topchutes' || cmd === 'topfaltas') { const k = cmd === 'topfaltas' ? 'faltas' : 'chutes'; const T = MT[k]; return list(d, tops(d)[k], `${T.ic} TOP 10 MODELO BH · ${T.title}`, 10, raw, page, true, 'O Modelo BH ainda não rodou para os jogos de hoje, ou não há titulares prováveis com linha boa.', d.rows.some(r => r.d) ? ' · melhor casa' : ' · linha de referência'); }
   if (cmd === 'top') { const n = clampN(rest[0]); return list(d, open(d).filter(inRange), `🔥 TOP ${n} DO DIA`, n, raw, page, true, '', RANGE_TXT); }
   if (cmd === 'valor') return list(d, open(d).filter(r => r.d && r.e != null && r.e >= .03 && r.e <= .15 && inRange(r)).sort((a, b) => (b.e! - a.e!)), '💰 VALOR COM ODD DE CASA', clampN(rest[0]), raw, page, true, '⏳ As odds entram quando as casas abrem as linhas e o leitor manda a foto. Tente mais perto dos jogos ou veja o Top do dia.', RANGE_TXT);
@@ -1213,7 +1294,9 @@ async function answer(text: string, chatId: number, page = 1): Promise<Out> {
     if (!q) return { text: '<b>🏟️ Escolha o jogo</b>', kb: pickKb };
     const g = d.games.find(x => String(x.id) === q) ?? d.games.find(x => norm(x.h).includes(q) || norm(x.a).includes(q));
     if (!g) return { text: `Não achei jogo hoje com <b>${esc(arg)}</b>. Escolha abaixo:`, kb: pickKb };
-    return list(d, d.rows.filter(r => r.g === g.id), `🏟️ ${g.h} x ${g.a} · ${hourBR(g.utc)}`, 16, `/jogo ${g.id}`, page, true, '', g.fase === 'escalacao' ? ' · escalação oficial' : ' · antes da escalação');
+    const out = list(d, d.rows.filter(r => r.g === g.id), `🏟️ ${g.h} x ${g.a} · ${hourBR(g.utc)}`, 16, `/jogo ${g.id}`, page, true, '', g.fase === 'escalacao' ? ' · escalação oficial' : ' · antes da escalação');
+    (out.kb as { inline_keyboard: unknown[] } | undefined)?.inline_keyboard?.unshift([BTN('🔎 Raio-X do jogo', `/raiox ${g.id}`)]);
+    return out;
   }
   if (cmd === 'jogador') {
     const q = norm(arg); if (q.length < 3) return { text: 'Digite o nome assim: <code>/jogador saka</code>', kb: { inline_keyboard: [HOME] } };
@@ -1390,7 +1473,7 @@ Deno.serve(async (req: Request) => {
     const cmds = await TG('setMyCommands', { commands: [
       ['top', 'Melhores do dia (ex.: /top 20)'], ['valor', 'Valor com odd de casa'], ['seguras', 'Chance de 65% ou mais'], ['chutes', 'Chutes'], ['nogol', 'Chutes ao gol'], ['primeiro', 'Chutes no 1º tempo'],
       ['faltas', 'Faltas cometidas'], ['sofridas', 'Faltas sofridas'], ['desarmes', 'Desarmes'], ['defesas', 'Defesas do goleiro'], ['times', 'Mercados de time'], ['totais', 'Totais do jogo'],
-      ['jogo', 'Linhas de um jogo'], ['jogador', 'Linhas de um jogador'], ['cacador', 'Caçador de props (filtros)'], ['tendencia', 'Método Tendência'], ['sequencias', 'Sequências de 5+ jogos'], ['arbitros', 'Árbitros do dia'], ['multipla', 'Múltipla (ex.: /multipla 3)'], ['jogos', 'Jogos de hoje'], ['desfalques', 'Desfalques'], ['resumo', 'Resumo da rodada'],
+      ['jogo', 'Linhas de um jogo'], ['jogador', 'Linhas de um jogador'], ['cacador', 'Caçador de props (filtros)'], ['tendencia', 'Método Tendência'], ['sequencias', 'Sequências de 5+ jogos'], ['arbitros', 'Árbitros do dia'], ['raiox', 'Raio-X do jogo'], ['multipla', 'Múltipla (ex.: /multipla 3)'], ['jogos', 'Jogos de hoje'], ['desfalques', 'Desfalques'], ['resumo', 'Resumo da rodada'],
       ['cards', 'Melhores do dia em imagem'], ['pdf', 'PDF do dia'], ['modelo', 'Modelo BH: chance de qualquer linha'], ['testes', 'Testes do Modelo BH'], ['topchutes', 'Top 10 do modelo em chutes'], ['topfaltas', 'Top 10 em faltas e desarmes'],
       ['receber', 'Receber os tops todo dia'], ['banca', 'Entradas registradas, lucro e ROI'], ['ontem', 'Resultado de ontem'], ['estrategias', 'Modelo por mercado: placar e entradas'], ['gabarito', 'Gabarito de ontem por mercado'],
       ['hoje', 'Listas de hoje'], ['acessos', 'Acessos ao bot (administrador)'], ['ajuda', 'Todos os comandos'], ['app', 'Abrir o app']].map(([command, description]) => ({ command, description })) });

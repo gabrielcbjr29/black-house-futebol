@@ -2,6 +2,7 @@
 import { MARKETS, playerOver, nbOver, ev } from './engine.js';
 import { PRESETS, DEFAULT, HUNT_MK, preset, run as huntRun } from './hunter.js';
 import { avatarSVG } from './avatar.js';
+import { raioxHTML, RXO, trendsHTML, TRO, refsHTML, ARO } from './raiox.js';
 
 const FN = 'https://mccxlgtiulpknubdiyrz.supabase.co/functions/v1/';
 const LG = { 39: ['🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Premier League'], 140: ['🇪🇸', 'La Liga'], 135: ['🇮🇹', 'Serie A'], 78: ['🇩🇪', 'Bundesliga'], 61: ['🇫🇷', 'Ligue 1'], 71: ['🇧🇷', 'Brasileirão'], 2: ['🏆', 'Champions'] };
@@ -14,7 +15,8 @@ const pc = x => Math.round(x * 100) + '%';
 const pct = x => (x >= 0 ? '+' : '') + (x * 100).toFixed(1).replace('.', ',') + '%';
 const hour = iso => new Date(iso).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
 const get = f => fetch('data/' + f + '?t=' + Math.floor(Date.now() / 60000)).then(r => r.ok ? r.json() : null).catch(() => null);
-let D = null, ST = null, H = null;
+let D = null, ST = null, H = null, RX = null;
+const loadRX = async () => RX ??= await get('raiox.json');
 const POSN = { G: 'goleiros', D: 'defensores', M: 'meio-campistas', F: 'atacantes' }, POS1 = { G: 'GOL', D: 'DEF', M: 'MEI', F: 'ATA' };
 const rigor = f => f >= 1.07 ? 'rigoroso' : f <= 0.93 ? 'deixa jogar' : 'normal';
 const refName = s => String(s).split(',')[0].trim();
@@ -104,9 +106,9 @@ function renderGames() {
   $('#games').innerHTML = D.games.map(g => {
     const rows = D.rows.filter(r => r.g === g.id && r.k !== 'p');
     const pj = D.mdl.t[g.id]?.pj;
-    return `<div class="game"><div class="meta">${LG[g.lg]?.[0] ?? ''} ${LG[g.lg]?.[1] ?? ''} · ${hour(g.utc)}${g.ref ? ' · 🟨 ' + esc(refName(g.ref)) + (D.refs?.[g.ref] ? ` · ${n1(D.refs[g.ref].fpg)} faltas e ${n1(D.refs[g.ref].cpg)} cartões/jogo (${rigor(D.refs[g.ref].f)})` : '') : ''}</div><h3>${esc(g.h)} x ${esc(g.a)}</h3>
+    return `<div class="game" data-g="${g.id}" role="button" tabindex="0"><div class="meta">${LG[g.lg]?.[0] ?? ''} ${LG[g.lg]?.[1] ?? ''} · ${hour(g.utc)}${g.ref ? ' · 🟨 ' + esc(refName(g.ref)) + (D.refs?.[g.ref] ? ` · ${n1(D.refs[g.ref].fpg)} faltas e ${n1(D.refs[g.ref].cpg)} cartões/jogo (${rigor(D.refs[g.ref].f)})` : '') : ''}</div><h3>${esc(g.h)} x ${esc(g.a)}</h3>
       ${pj ? `<table><tr><th>Projeção</th><th class="r">${esc(g.h)}</th><th class="r">${esc(g.a)}</th></tr>${[['sh', 'Chutes'], ['sot', 'Chutes ao gol'], ['fc', 'Faltas'], ['poss', 'Posse %']].map(([k, lb]) => `<tr><td>${lb}</td><td class="r">${n1(Math.round(pj.h[k] * 10) / 10)}</td><td class="r">${n1(Math.round(pj.a[k] * 10) / 10)}</td></tr>`).join('')}</table>` : '<p class="hint">Jogo encerrado ou sem projeção.</p>'}
-      <p class="meta">${g.fase === 'escalacao' ? '✅ escalação oficial' : '🕐 antes da escalação'} · ${rows.filter(r => r.d).length} linhas de time com odd de casa</p></div>`;
+      <p class="meta">${g.fase === 'escalacao' ? '✅ escalação oficial' : '🕐 antes da escalação'} · ${rows.filter(r => r.d).length} linhas de time com odd de casa · <b>🔎 Raio-X</b></p></div>`;
   }).join('') || '<p class="hint">Sem jogos das ligas do projeto hoje.</p>';
 }
 async function renderStrategies() {
@@ -163,11 +165,29 @@ function initHunt() {
     if (r) detail(r.l === HF.l ? r : { ...r, l: HF.l, p: x.p, d: x.house ? x.odd : null, b: x.house, e: x.e }); });
   HP = 'classico'; HF = preset(HP); hForm();
 }
+// ---------- Raio-X, Tendências e Árbitros ----------
+const segVal = (b, o) => { const k = b.parentElement.dataset.k, v = b.dataset.v; o[k] = /^\d+$/.test(v) ? +v : v; };
+async function openRaiox(id) {
+  if (!(await loadRX())) { $('#dlgBody').innerHTML = '<p class="hint">O Raio-X ainda não foi publicado.</p>'; $('#dlg').showModal(); return; }
+  const g = RX.g.find(x => x.id === id); if (!g) return;
+  const o = { ...RXO }, draw = () => { $('#dlgBody').innerHTML = raioxHTML(RX, g, o); };
+  $('#dlgBody').onclick = e => { const b = e.target.closest('.seg2 button'); if (!b) return; segVal(b, o); draw(); };
+  draw(); $('#dlg').showModal();
+}
+async function renderTrends() {
+  if (!(await loadRX())) { $('#trends').innerHTML = '<p class="hint">As tendências ainda não foram publicadas.</p>'; return; }
+  $('#trends').innerHTML = trendsHTML(RX, D, TRO);
+}
+async function renderRefs() {
+  if (!(await loadRX())) { $('#refs').innerHTML = '<p class="hint">Os árbitros ainda não foram publicados.</p>'; return; }
+  $('#refs').innerHTML = refsHTML(RX, ARO);
+}
 function route() {
   const v = (location.hash || '#entradas').slice(1);
   for (const s of document.querySelectorAll('.view')) s.hidden = s.id !== 'v-' + v;
   for (const a of document.querySelectorAll('.tabs a')) a.classList.toggle('on', a.getAttribute('href') === '#' + v);
   if (v === 'estrategias') renderStrategies(); if (v === 'guia') renderGuide(); if (v === 'cacador') renderHunt();
+  if (v === 'tendencias') renderTrends(); if (v === 'arbitros') renderRefs();
 }
 async function main() {
   [D, ST] = await Promise.all([get('bot.json'), get('strategies.json')]);
@@ -180,6 +200,11 @@ async function main() {
   for (const id of ['#q', '#fLg', '#fMk', '#fGame', '#fOdd', '#fOne', '#fSort']) $(id).addEventListener('input', renderList);
   initHunt();
   $('#list').addEventListener('click', e => { const b = e.target.closest('.card'); if (b) detail(VIEW[+b.dataset.i]); });
+  $('#games').addEventListener('click', e => { const c = e.target.closest('.game[data-g]'); if (c) openRaiox(+c.dataset.g); });
+  $('#games').addEventListener('keydown', e => { const c = e.target.closest('.game[data-g]'); if (c && e.key === 'Enter') openRaiox(+c.dataset.g); });
+  $('#trends').addEventListener('click', e => { const b = e.target.closest('.seg2 button'); if (!b) return; segVal(b, TRO); if (b.parentElement.dataset.k === 'tipo') TRO.cat = ''; renderTrends(); });
+  $('#trends').addEventListener('change', e => { if (e.target.id === 'trBoth') { TRO.both = e.target.checked; renderTrends(); } });
+  $('#refs').addEventListener('click', e => { const b = e.target.closest('.seg2 button'); if (!b) return; segVal(b, ARO); renderRefs(); });
   renderList(); renderGames();
   addEventListener('hashchange', route); route();
 }

@@ -32,6 +32,7 @@ Leitores no navegador ──► Supabase: função linhas ───────�
 | `collector/lines.js` | Linhas das casas: encaixe de jogo, jogador e time por nome |
 | `collector/botdata.js` | Linhas do bot e do app (`bot.json`) |
 | `collector/strategies.js` | Uma estratégia por mercado (papel) |
+| `collector/raiox.js`, `public/raiox-lib.js` | Raio-X do jogo, tendências L x/y e árbitros completos (`raiox.json`), no estilo do Valuestats com dados próprios |
 | `collector/calibrate.js` | Validação walk-forward com o histórico real (`calib.json`) e k calibrado |
 | `collector/demo.js` | Dados simulados para testes e demonstração |
 | `bot/telegram`, `bot/estrategias`, `bot/linhas` | Funções do Supabase |

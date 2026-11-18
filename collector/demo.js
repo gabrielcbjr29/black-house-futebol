@@ -8,6 +8,7 @@ import { buildBotData } from './botdata.js';
 import { pickStrategies } from './strategies.js';
 import { buildResults } from './results.js';
 import { dayBR } from '../config/leagues.js';
+import { buildRaiox } from './raiox.js';
 
 export function rng(seed = 7) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
 export function poisson(r, mu) { const L = Math.exp(-mu); let k = 0, p = 1; do { k++; p *= r(); } while (p > L); return k - 1; }
@@ -98,7 +99,9 @@ export function demoSlate({ now = new Date() } = {}) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const out = new URL('../public/data/', import.meta.url); mkdirSync(out, { recursive: true });
-  const { slate, bot, st, results } = demoSlate();
-  for (const [f, x] of [['slate.json', slate], ['bot.json', bot], ['strategies.json', { ...st, demo: true }], ['results.json', results]]) writeFileSync(new URL(f, out), JSON.stringify(x));
+  const { H, slate, bot, st, results } = demoSlate();
+  const raiox = buildRaiox(H, slate.games, slate.model, { date: slate.date, inj: slate.inj });
+  const { hunt, ...botRest } = bot;
+  for (const [f, x] of [['slate.json', slate], ['bot.json', botRest], ['hunt.json', hunt], ['raiox.json', raiox], ['strategies.json', { ...st, demo: true }], ['results.json', results]]) writeFileSync(new URL(f, out), JSON.stringify(x));
   console.log(`demo: ${bot.rows.length} linhas, ${st.picks.length} entradas de estratégia`);
 }

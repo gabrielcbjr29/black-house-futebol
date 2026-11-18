@@ -11,6 +11,7 @@ import { buildModel, buildProfiles, refKey } from './model.js';
 import { loadKits, saveKits, colorsFromLineups, updateKits, kitsForBot } from './kits.js';
 import { finishBot } from './bot.js';
 import { buildResults } from './results.js';
+import { buildRaiox } from './raiox.js';
 
 const OUT = new URL('../public/data/', import.meta.url);
 const LINEUP_WINDOW = 80 * 6e4; // escalação: procura a partir de 80 min antes do jogo
@@ -71,6 +72,9 @@ async function main() {
   mkdirSync(OUT, { recursive: true });
   writeFileSync(new URL('slate.json', OUT), JSON.stringify(slate));
   writeFileSync(new URL('results.json', OUT), JSON.stringify(buildResults(H)));
+  // Raio-X dos jogos (estatísticas pré-jogo, tendências L x/y, árbitros): não gasta pedido, só o histórico
+  try { const rx = buildRaiox(H, open, model, { date, inj }); writeFileSync(new URL('raiox.json', OUT), JSON.stringify(rx)); console.log(`raio-x: ${rx.g.length} jogos · ${rx.tr.length} tendências de time/jogo · ${rx.pt.length} de jogadores`); }
+  catch (e) { console.log('raio-x: falhou (' + e.message + ')'); }
   console.log(`modelo: ${Object.keys(model.players).length} jogadores em ${open.length} jogos · escalação oficial em ${games.filter(g => g.lineup).length} · ${api.st.used} pedidos (cota restante ${api.st.remaining ?? '?'})`);
   await finishBot(slate);
 }
