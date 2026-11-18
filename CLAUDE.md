@@ -17,7 +17,7 @@ Props de futebol com modelo próprio (Modelo BH), copiando a arquitetura do Blac
 ```
 API-Football Pro ─► GitHub Actions (relogio.yml dispara atualizar.yml às :20 e :50, 24h)
    testes → histórico (data/hist/*.ndjson) → calibração → build (slate, bot, hunt, raiox, strategies, results) → commit → cards + PDF → Pages
-Tarefa agendada "Black House Futebol · Linhas da 99play" (navegador do app Claude no PC do usuário, :05 e :35) e
+Tarefa agendada "Black House Futebol · Linhas da 99play" (navegador do app Claude no PC do usuário, de hora em hora aos :05, 8h–23h) e
 leitores Tampermonkey (99play, farra) ─► função linhas (Supabase)
 Supabase mccxlgtiulpknubdiyrz: telegram-bot · estrategias · linhas · pg_cron (supabase/cron.sql)
 ```
