@@ -56,14 +56,23 @@ export function fmtEntries(list: any[]) {
 }
 // madrugada (0h–8h de Brasília): mensagens chegam sem som
 const quiet = () => +new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23' }).format(new Date()) < 8;
-async function send(text: string, kb: unknown, all = false) {
+// odd mínima de cada chat (escolhida no bot, /odd): bot_config ODDMIN_<chat>. 0 = sem corte além da faixa padrão.
+async function oddMins(): Promise<Record<string, number>> {
+  const rows: any[] = await sb('bot_config?key=like.ODDMIN_*&select=key,value').catch(() => []) ?? [];
+  return Object.fromEntries(rows.map(r => [String(r.key).slice(7), +r.value || 0]));
+}
+const okOdd = (x: any, om: number) => !om || +(x.open_odd ?? x.odd) >= om - 1e-9;
+// text pode ser uma função da odd mínima do chat (devolve null quando nada passa no corte dele)
+async function send(text: string | ((om: number) => string | null), kb: unknown, all = false) {
   const token = await cfg('TELEGRAM_BOT_TOKEN'); if (!token) return 0;
   // all: quem recebe as estratégias ou os tops (alerta de escalação)
   const subs: any[] = await sb(all ? 'bot_subs?select=chat_id&or=(est.eq.true,chutes.eq.true,faltas.eq.true)' : 'bot_subs?select=chat_id&est=eq.true') ?? [];
+  const mins = typeof text === 'function' ? await oddMins() : {};
   let sent = 0;
   for (const s of subs) {
+    const t = typeof text === 'function' ? text(mins[String(s.chat_id)] ?? 0) : text; if (!t) continue;
     const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: s.chat_id, text, parse_mode: 'HTML', disable_web_page_preview: true, disable_notification: quiet(), reply_markup: kb }) }).then(r => r.json()).catch(() => null);
+      body: JSON.stringify({ chat_id: s.chat_id, text: t, parse_mode: 'HTML', disable_web_page_preview: true, disable_notification: quiet(), reply_markup: kb }) }).then(r => r.json()).catch(() => null);
     if (r?.ok) sent++;
   }
   return sent;
@@ -78,12 +87,15 @@ async function alert(fresh: any[], evMin: number) {
     console.error('alerta pelo bot falhou', r);
   } catch (e) { console.error('alerta pelo bot falhou', e); }
   // reserva: mensagem agrupada (formato antigo)
-  const { blocks, regs, n } = fmtEntries(fresh);
-  const fases = [...new Set(fresh.map(x => FASE[x.fase] ?? ''))].filter(Boolean).join(' / ');
+  const build = (om: number) => {
+  const mine = fresh.filter(x => okOdd(x, om)); if (!mine.length) return null;
+  const { blocks, regs, n } = fmtEntries(mine);
+  const fases = [...new Set(mine.map(x => FASE[x.fase] ?? ''))].filter(Boolean).join(' / ');
   let text = `🚨 <b>${n > 1 ? 'NOVAS ENTRADAS' : 'NOVA ENTRADA'} · MODELO BH ⚽</b>\n<i>Melhor odd entre as casas agora · EV mínimo ${Math.round(evMin * 100)}% · 1u cada${fases ? ' · ' + fases : ''}</i>\n\n${blocks.join('\n\n')}\n\n🟩 bateu · 🟥 não bateu nos últimos 10 como titular (mais recente primeiro)\n📝 <i>Toque no número para registrar a sua aposta. Quanto antes, melhor: a linha costuma andar até o jogo.</i>\n${FOOT}`;
   if (text.length > 4090) text = text.slice(0, 4000).replace(/<[^>]*$/, '') + '</blockquote>…';
-  const kb = { inline_keyboard: [...Array.from({ length: Math.ceil(regs.length / 5) }, (_, k) => regs.slice(k * 5, k * 5 + 5)), [{ text: '🧪 Placar', callback_data: '/estrategias' }, { text: '💼 Banca', callback_data: '/banca' }]] };
-  return send(text, kb);
+  return text;
+  };
+  return send(build, { inline_keyboard: [[{ text: '🧪 Placar', callback_data: '/estrategias' }, { text: '💼 Banca', callback_data: '/banca' }]] });
 }
 
 // grava as entradas do dia. A ENTRADA vale na linha e odd do momento do alerta (open_line/open_odd, guardadas pelo
@@ -252,13 +264,14 @@ async function risco(bot: any) {
     await sb(`strategy_picks?id=eq.${x.id}`, { method: 'PATCH', body: JSON.stringify(patch) }).catch(() => null);
   }
   let alertas = 0;
-  if (items.length) {
-    let text = `⚠️ <b>ALERTA DE RISCO · ENTRADA${items.length > 1 ? 'S' : ''} JÁ ENVIADA${items.length > 1 ? 'S' : ''}</b>\n<i>O cenário mudou depois do alerta.</i>\n\n` + items.map(({ x, why }) =>
+  if (items.length) alertas = await send((om: number) => {
+    const its = items.filter(({ x }) => okOdd(x, om)); if (!its.length) return null;
+    let text = `⚠️ <b>ALERTA DE RISCO · ENTRADA${its.length > 1 ? 'S' : ''} JÁ ENVIADA${its.length > 1 ? 'S' : ''}</b>\n<i>O cenário mudou depois do alerta.</i>\n\n` + its.map(({ x, why }) =>
       `⚽ <b>${esc(x.team)} x ${esc(x.opp)}</b>${x.tip_utc ? ' · ' + hourBR(x.tip_utc) : ''}\n<blockquote><b>${esc(x.name)}</b> · ${MKN[x.mk] ?? x.mk}\n${x.side === 'u' ? '⬇️ Menos' : '⬆️ Mais'} de <b>${n1(+(x.open_line ?? x.line))}</b> · @${n2(+(x.open_odd ?? x.odd))}\n${why.map(w => '• ' + w).join('\n')}</blockquote>`).join('\n\n')
       + `\n\n<i>Se ainda não entrou, reavalie. Se já entrou, veja se vale proteger. O placar segue contando a entrada como foi enviada.</i>`;
     if (text.length > 4090) text = text.slice(0, 4000).replace(/<[^>]*$/, '') + '…';
-    alertas = await send(text, { inline_keyboard: [[{ text: '🧪 Placar', callback_data: '/estrategias' }, { text: '💼 Banca', callback_data: '/banca' }]] });
-  }
+    return text;
+  }, { inline_keyboard: [[{ text: '🧪 Placar', callback_data: '/estrategias' }, { text: '💼 Banca', callback_data: '/banca' }]] });
   return { vigiadas: open.length, novos_riscos: items.length, alertas };
 }
 

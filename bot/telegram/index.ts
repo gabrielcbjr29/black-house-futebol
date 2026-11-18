@@ -113,8 +113,25 @@ const PAGE = 5;
 // faixa de odd das listas (odd da casa ou, sem casa, a odd justa)
 const ODD_MIN = 1.4, ODD_MAX = 3.5;
 const oddOf = (r: Row) => r.d ?? (r.p > 0 ? 1 / r.p : 99);
-const inRange = (r: Row) => { const o = oddOf(r); return o >= ODD_MIN - 1e-9 && o <= ODD_MAX + 1e-9; };
+const inRangeBase = (r: Row) => { const o = oddOf(r); return o >= ODD_MIN - 1e-9 && o <= ODD_MAX + 1e-9; };
+const inRange = inRangeBase;
 const RANGE_TXT = ' · odds 1,40–3,50';
+// odd mínima do usuário (pedido de 18/11, igual ao bot da NBA): vale para as listas, os Top 10, a múltipla, o envio diário
+// e os alertas. Fica na bot_config (ODDMIN_<chat>), sem mexer no banco; sem escolha = 1,40 (a faixa padrão das listas).
+// O papel, o placar e a planilha seguem contando tudo: o corte é só do que chega para você.
+const OM_OPTS = [1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.2, 2.5];
+const OM_CACHE = new Map<number, { at: number; v: number }>();
+async function userMin(chatId: number): Promise<number> {
+  const c = OM_CACHE.get(chatId); if (c && Date.now() - c.at < 60_000) return c.v;
+  const v = +((await sb(`bot_config?key=eq.ODDMIN_${chatId}&select=value`).catch(() => null))?.[0]?.value ?? 0) || 0;
+  OM_CACHE.set(chatId, { at: Date.now(), v }); return v;
+}
+async function allMins(): Promise<Record<string, number>> {
+  const rows: any[] = await sb('bot_config?key=like.ODDMIN_*&select=key,value').catch(() => []) ?? [];
+  return Object.fromEntries(rows.map(r => [String(r.key).slice(7), +r.value || 0]));
+}
+const okOdd = (o: number | null | undefined, om: number) => !om || (o != null && +o >= om - 1e-9);
+const rangeTxt = (om: number) => om > ODD_MIN ? ` · odds ${n2(om)}–3,50` : RANGE_TXT;
 const keyOf = (r: Row) => `${r.id}|${r.m}|${r.l}${r.s === 'u' ? '|u' : ''}`;
 const sideTx = (s?: string) => s === 'u' ? '⬇️ Menos' : '⬆️ Mais';
 const cardUrl = (d: Data, r: Row) => `${APP_URL}data/cards/${encodeURIComponent(`${r.id}-${r.m}-${String(r.l).replace('.', '_')}${r.s === 'u' ? '-u' : ''}`)}.jpg?v=${encodeURIComponent(d.gen)}`;
@@ -237,15 +254,15 @@ const MT: Record<string, { mk: string[]; title: string; cmd: string; ic: string 
   faltas: { mk: ['FC', 'FS', 'TK'], title: 'FALTAS E DESARMES', cmd: '/topfaltas', ic: '🧱' },
 };
 // ranking pela Nota BH, um por jogador; só titular confirmado ou provável (80%+); jogo com linha de casa só entra com linha de casa
-function modelTop(d: Data, mk: string[], n = 10) {
+function modelTop(d: Data, mk: string[], n = 10, om = 0) {
   const cov = new Set(d.rows.filter(r => r.d).map(r => r.g));
-  const rows = open(d).filter(r => r.k === 'p' && mk.includes(r.m) && (r.st === 'xi' || (r.st === 'provavel' && (r.ps ?? 0) >= .8)) && r.p >= .55 && r.p <= .85 && inRange(r) && (r.d || !cov.has(r.g)))
+  const rows = open(d).filter(r => r.k === 'p' && mk.includes(r.m) && (r.st === 'xi' || (r.st === 'provavel' && (r.ps ?? 0) >= .8)) && r.p >= .55 && r.p <= .85 && inRange(r) && okOdd(oddOf(r), om) && (r.d || !cov.has(r.g)))
     .sort((a, b) => (b.nt - a.nt) || ((b.e ?? -1) - (a.e ?? -1)));
   const seen = new Set<string>(), out: Row[] = [];
   for (const r of rows) { if (seen.has(r.id)) continue; seen.add(r.id); out.push(r); if (out.length >= n) break; }
   return out;
 }
-function tops(d: Data, n = 10): Record<string, Row[]> { return Object.fromEntries(Object.entries(MT).map(([k, T]) => [k, modelTop(d, T.mk, n)])); }
+function tops(d: Data, n = 10, om = 0): Record<string, Row[]> { return Object.fromEntries(Object.entries(MT).map(([k, T]) => [k, modelTop(d, T.mk, n, om)])); }
 const MT_NOTE = (d: Data) => d.rows.some(r => r.d)
   ? '\n<i>🏠 Linha e odd da melhor casa lida. 📏 Jogo sem casa ainda usa a linha de referência do modelo. Só titulares confirmados ou prováveis (80%+).</i>'
   : '\n<i>📏 Linha de referência do modelo (chance perto de 62%). Confira a linha da sua casa: se for outra, use /modelo para ver a chance nela. Só titulares confirmados ou prováveis (80%+).</i>';
@@ -256,10 +273,10 @@ function compact(r: Row, i: number) {
 ${lineSrc(r)}
 📊 L5 ${hitTxt(r.h5)} · L10 ${hitTxt(r.hit)} · 🧠 ${n1(r.pj)}${r.ms ? ` · ⏱️ ~${r.ms} min` : ''}${r.st === 'xi' ? ' · ✅ titular' : ''}${seq(r) ? `\n${sqLine(r.sq, r.l)}\n<i>🔢 ${seq(r)}</i>` : ''}`;
 }
-function topText(d: Data, key: string) {
-  const T = MT[key], top = tops(d)[key];
+function topText(d: Data, key: string, om = 0) {
+  const T = MT[key], top = tops(d, 10, om)[key];
   if (!top.length) return null;
-  return `<b>${T.ic} TOP 10 MODELO BH · ${T.title}</b>\n<i>${dateBR(d.date)} · ${d.games.length} jogos · atualizado ${hourBR(d.gen)}</i>\n\n` + top.map((r, i) => compact(r, i + 1)).join('\n\n') + '\n' + MT_NOTE(d) + '\n<i>📝 Toque no número para registrar a entrada (1u) com a sua odd. 🔢 = sequência dos últimos 10 como titular (mais recente primeiro).</i>' + FOOT;
+  return `<b>${T.ic} TOP 10 MODELO BH · ${T.title}</b>\n<i>${dateBR(d.date)} · ${d.games.length} jogos · atualizado ${hourBR(d.gen)}</i>\n\n` + top.map((r, i) => compact(r, i + 1)).join('\n\n') + '\n' + MT_NOTE(d) + '\n<i>📝 Toque no número para registrar a entrada (1u) com a sua odd. 🔢 = sequência dos últimos 10 como titular (mais recente primeiro).</i>' + (om > ODD_MIN ? `\n<i>🎯 Só odd ${n2(om)} ou mais (sua odd mínima).</i>` : '') + FOOT;
 }
 function shareText(r: Row, i?: number) {
   const head = `${i != null ? `${i}. ` : '⚽ '}${r.k === 'p' ? `${r.n} (${r.t})` : r.n} · ${vsTxt(r)} · ${hourBR(r.utc)}`;
@@ -405,12 +422,34 @@ async function testesCmd(chatId: number, rest: string[]): Promise<Out> {
 
 // ---------- envio diário ----------
 type Sub = { chutes: boolean; faltas: boolean; est: boolean };
-const subKb = (s: Sub | null) => ({ inline_keyboard: [
+const subKb = (s: Sub | null, om = 0) => ({ inline_keyboard: [
   [BTN(`${s?.chutes ? '✅' : '⬜'} Top 10 Chutes`, '/receber chutes'), BTN(`${s?.faltas ? '✅' : '⬜'} Top 10 Faltas`, '/receber faltas')],
   [BTN(`${s?.est ? '✅' : '⬜'} Modelo por mercado`, '/receber est')],
+  [BTN(`🎯 Odd mínima: ${om > ODD_MIN ? n2(om) : 'padrão (1,40)'}`, '/odd')],
   [BTN('🔕 Parar de receber', '/receber parar'), BTN('🏠 Menu', '/menu')]] });
+// 🎯 odd mínima: escolha por botões; vale para tudo que o bot mostra e manda para este chat
+async function oddCmd(chatId: number, rest: string[]): Promise<Out> {
+  let om = await userMin(chatId);
+  const v = (rest[0] ?? '').replace(',', '.');
+  if (v) {
+    const x = norm(v) === 'padrao' ? 0 : +v;
+    if (isFinite(x) && x >= 0 && x <= 10) {
+      if (x > ODD_MIN) await sb('bot_config?on_conflict=key', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ key: `ODDMIN_${chatId}`, value: String(x), updated_at: new Date().toISOString() }) });
+      else await sb(`bot_config?key=eq.ODDMIN_${chatId}`, { method: 'DELETE' }).catch(() => null);
+      om = x > ODD_MIN ? x : 0; OM_CACHE.set(chatId, { at: Date.now(), v: om });
+    }
+  }
+  const lb = (o: number) => `${(om > ODD_MIN ? Math.abs(om - o) < 1e-9 : o === ODD_MIN) ? '✅ ' : ''}${n2(o)}${o === ODD_MIN ? ' (padrão)' : '+'}`;
+  return { text: `🎯 <b>ODD MÍNIMA</b>
+
+Agora: <b>${om > ODD_MIN ? n2(om) + ' ou mais' : 'padrão (1,40 ou mais)'}</b>
+<blockquote>Vale para tudo que o bot te mostra e manda: listas (Top do dia, Valor, Seguras, Chutes, Faltas…), Top 10 Chutes e Faltas, múltipla, envio diário, alertas das estratégias e alertas de risco.</blockquote>
+<i>Usa a odd da casa (99play ou outra lida); sem odd de casa, a odd justa do modelo. A planilha, o placar e o gabarito seguem contando todas as entradas, para medir o método inteiro.</i>`,
+    kb: { inline_keyboard: [...chunk(OM_OPTS.map(o => BTN(lb(o), `/odd ${o === ODD_MIN ? 'padrao' : o}`)), 3), [BTN('📬 Envio diário', '/receber'), BTN('🏠 Menu', '/menu')]] } };
+}
 async function receberCmd(chatId: number, rest: string[]): Promise<Out> {
   const a = norm(rest[0] ?? '');
+  if (a === 'odd') return oddCmd(chatId, rest.slice(1));
   let s: Sub | null = null;
   try { s = (await sb(`bot_subs?chat_id=eq.${chatId}&select=chutes,faltas,est`))?.[0] ?? null; } catch { return { text: 'Não consegui acessar as inscrições agora.', kb: { inline_keyboard: [HOME] } }; }
   let next = s;
@@ -418,8 +457,9 @@ async function receberCmd(chatId: number, rest: string[]): Promise<Out> {
   else if (a === 'parar') next = { chutes: false, faltas: false, est: false };
   else if (a === 'chutes' || a === 'faltas' || a === 'est') next = { ...(s ?? { chutes: false, faltas: false, est: false }), [a]: !(s?.[a as keyof Sub]) };
   if (JSON.stringify(next) !== JSON.stringify(s)) await sb('bot_subs?on_conflict=chat_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ chat_id: chatId, ...next, updated_at: new Date().toISOString() }) });
+  const om = await userMin(chatId);
   const on = [next?.chutes && '🎯 Top 10 Chutes', next?.faltas && '🧱 Top 10 Faltas e desarmes', next?.est && '🧪 Modelo por mercado (entradas do dia)'].filter(Boolean);
-  return { text: `<b>📬 ENVIO DIÁRIO DO MODELO BH</b>\n\n${on.length ? `Você recebe todo dia, cerca de 2h30 antes do primeiro jogo:\n${on.map(x => '• ' + x).join('\n')}${next?.est ? '\n\n🚨 No modelo por mercado, cada entrada nova também chega na hora, em alerta, assim que o modelo aponta (das 6h às 23h50).' : ''}` : 'Você não está recebendo nada no momento.'}\n\nToque para ligar ou desligar cada lista:`, kb: subKb(next) };
+  return { text: `<b>📬 ENVIO DIÁRIO DO MODELO BH</b>\n\n${on.length ? `Você recebe todo dia, cerca de 2h30 antes do primeiro jogo:\n${on.map(x => '• ' + x).join('\n')}${next?.est ? '\n\n🚨 No modelo por mercado, cada entrada nova também chega na hora, em alerta, assim que o modelo aponta (das 6h às 23h50).' : ''}` : 'Você não está recebendo nada no momento.'}\n\nToque para ligar ou desligar cada lista:${om > ODD_MIN ? `\n<i>🎯 Só entradas com odd ${n2(om)} ou mais.</i>` : ''}`, kb: subKb(next, om) };
 }
 async function pushDaily(force = false, lead = 0) {
   CACHE = null;
@@ -437,13 +477,19 @@ async function pushDaily(force = false, lead = 0) {
   }
   const gravados = await recordTops(d).catch(e => { console.error('top_picks', e); return 0; });
   const subs: ({ chat_id: number } & Sub)[] = await sb('bot_subs?select=chat_id,chutes,faltas,est&or=(chutes.eq.true,faltas.eq.true,est.eq.true)') ?? [];
-  const txt: Record<string, string | null> = { chutes: topText(d, 'chutes'), faltas: topText(d, 'faltas') };
-  const et = estText(d, await estEntries(d.date));
+  const mins = await allMins(), ents = await estEntries(d.date);
+  const byOm = new Map<number, { txt: Record<string, string | null>; T: Record<string, Row[]>; et: ReturnType<typeof estText> }>();
+  const forOm = (om: number) => {
+    if (!byOm.has(om)) { const pk = ents ? { ...ents, picks: ents.picks.filter((x: any) => okOdd(+x.odd, om)) } : null;
+      byOm.set(om, { txt: { chutes: topText(d, 'chutes', om), faltas: topText(d, 'faltas', om) }, T: tops(d, 10, om), et: pk?.picks.length ? estText(d, pk) : null }); }
+    return byOm.get(om)!;
+  };
   let sent = 0;
   for (const s of subs) {
+    const { txt, T, et } = forOm(mins[String(s.chat_id)] ?? 0);
     for (const k of ['chutes', 'faltas'] as const) {
       if (!s[k] || !txt[k]) continue;
-      const regs = tops(d)[k].map((r, i) => BTN(`📝${i + 1}`, `bet:${keyOf(r)}:${k}`));
+      const regs = T[k].map((r, i) => BTN(`📝${i + 1}`, `bet:${keyOf(r)}:${k}`));
       const r = await TG('sendMessage', { chat_id: s.chat_id, text: txt[k]!.slice(0, 4090), parse_mode: 'HTML', disable_web_page_preview: true,
         reply_markup: { inline_keyboard: [...chunk(regs, 5), [BTN('📋 Ver com detalhes', MT[k].cmd), BTN('📤 Texto p/ inscritos', 'cp:' + k)], [BTN('💼 Banca', '/banca')], [BTN('📬 Envio diário', '/receber'), BTN('🏠 Menu', '/menu')]] } });
       if (r.ok) sent++;
@@ -459,7 +505,7 @@ async function pushDaily(force = false, lead = 0) {
     if (await sendPDF(s.chat_id, d)) sent++;
   }
   await sb('bot_config?on_conflict=key', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ key: flag, value: String(sent), updated_at: new Date().toISOString() }) }).catch(() => null);
-  return { ok: true, date: d.date, inscritos: subs.length, mensagens: sent, top_gravado: gravados, estrategias: et?.regs.length ?? 0 };
+  return { ok: true, date: d.date, inscritos: subs.length, mensagens: sent, top_gravado: gravados, estrategias: ents?.picks.length ?? 0 };
 }
 
 // ---------- entradas das estratégias ----------
@@ -811,11 +857,11 @@ function list(d: Data, rows: Row[], title: string, n: number, cmd: string, page 
   const share = src !== 'lista' ? [[BTN('📤 Texto p/ inscritos (lista toda)', 'cp:' + src)]] : [];
   return { text: header(d, title, note + (pages > 1 ? ` · página ${pg}/${pages}` : '')) + '\n' + body + '\n<i>🔎 análise completa, registro e 📋 copiar' + (pics.length ? ' · 🖼️ ver o card em imagem' : '') + '</i>\n' + FOOT, kb: { inline_keyboard: [nums, ...(pics.length ? [pics] : []), ...(nav.length ? [nav] : []), ...share, home(cmd, pg)] } };
 }
-function multipla(d: Data, arg: string | undefined): Out {
+function multipla(d: Data, arg: string | undefined, om = 0): Out {
   const v = arg ? parseFloat(arg.replace(',', '.')) : NaN;
   const target = Number.isFinite(v) && v >= 1.3 && !(Number.isInteger(v) && v <= 8) ? v : null;
   const legs = target ? 8 : Math.max(2, Math.min(6, Number.isFinite(v) ? v : 3));
-  const cand = open(d).filter(r => (r.gr === 'A+' || r.gr === 'A') && r.d && r.d >= ODD_MIN && r.d <= ODD_MAX && (r.e ?? 0) >= 0 && r.st !== 'duvida' && r.st !== 'banco' && !/1$/.test(r.m))
+  const cand = open(d).filter(r => (r.gr === 'A+' || r.gr === 'A') && r.d && r.d >= Math.max(ODD_MIN, om) - 1e-9 && r.d <= ODD_MAX && (r.e ?? 0) >= 0 && r.st !== 'duvida' && r.st !== 'banco' && !/1$/.test(r.m))
     .sort((a, b) => b.nt - a.nt);
   const pick: Row[] = [], games = new Set<number>(); let odd = 1, p = 1;
   for (const r of cand) { if (target ? odd >= target : pick.length >= legs) break; if (pick.length >= 8) break; if (games.has(r.g)) continue; games.add(r.g); pick.push(r); odd *= r.d!; p *= r.p; }
@@ -826,7 +872,7 @@ function multipla(d: Data, arg: string | undefined): Out {
   return { text: header(d, `🎟️ MÚLTIPLA DE ${pick.length} PERNAS`, target ? ` · alvo ${n2(target)}` : '') + `\n<blockquote>${legsTxt}</blockquote>
 <b>Odd combinada  <code>${n2(odd)}</code></b>
 ${bar(p)} chance ${pc(p)} · EV ${evx >= 0 ? '+' : ''}${evx.toFixed(1).replace('.', ',')}%
-<i>Uma perna por jogo, nota A ou A+, só com odd de casa. Pernas tratadas como independentes: use stake menor que a de uma simples. As odds podem ser de casas diferentes.</i>
+<i>Uma perna por jogo, nota A ou A+, só com odd de casa${om > ODD_MIN ? ` de ${n2(om)} ou mais` : ''}. Pernas tratadas como independentes: use stake menor que a de uma simples. As odds podem ser de casas diferentes.</i>
 ` + FOOT, kb };
 }
 
@@ -1149,7 +1195,7 @@ function alertExtra(d: Data, r: Row, x: any) {
   return out.length ? `\n<blockquote>${out.join('\n')}</blockquote>` : '';
 }
 async function alertas(entries: any[]) {
-  const d = await data(), subs: any[] = await sb('bot_subs?select=chat_id&est=eq.true') ?? [];
+  const d = await data(), subs: any[] = await sb('bot_subs?select=chat_id&est=eq.true') ?? [], mins = await allMins();
   const names: Record<string, string> = Object.fromEntries(((await estToday(d.date))?.strategies ?? []).map((s: any) => [s.id, s.name]));
   const all = [...d.rows, ...(d.rowsU ?? [])], silent = quiet();
   let sent = 0, fotos = 0;
@@ -1162,6 +1208,7 @@ async function alertas(entries: any[]) {
     const text = `${title}\n<i>Linha e odd da melhor casa agora · 1u no papel${td ? '' : ' · EV mínimo 5%'}</i>\n${card(d, r, undefined, { td })}${alertExtra(d, r, x)}\n<i>📝 Registre a sua aposta com a odd que você pegou. Quanto antes, melhor: a linha costuma andar até o jogo.</i>\n${FOOT}`;
     const kb = { inline_keyboard: [[BTN('📝 Registrar minha aposta', `bet:${keyOf(r)}:e.${x.strategy_id}`)], [{ text: '📋 Copiar', copy_text: { text: shareText(r).slice(0, 256) } }, BTN('🧪 Placar', '/estrategias')]] };
     for (const s of subs) {
+      if (!okOdd(+(x.open_odd ?? x.odd), mins[String(s.chat_id)] ?? 0)) continue; // odd mínima do chat
       const ph = await TG('sendPhoto', { chat_id: s.chat_id, photo: cardUrl(d, r), disable_notification: silent }).catch(() => null);
       if (ph?.ok) fotos++;
       const m = await TG('sendMessage', { chat_id: s.chat_id, text: text.length > 4090 ? text.slice(0, 4000).replace(/<[^>]*$/, '') + '…' : text, parse_mode: 'HTML', disable_web_page_preview: true, disable_notification: silent, reply_markup: kb });
@@ -1204,6 +1251,7 @@ const HELP = `<b>📖 COMANDOS</b>
 /topchutes · top 10 em chutes
 /topfaltas · top 10 em faltas e desarmes
 /receber · receber os tops e as estratégias todo dia
+/odd · odd mínima: só mostra e manda entradas a partir dela
 /banca · suas entradas, lucro e ROI · /banca todos
 /apagar 12 · apaga uma entrada registrada errada
 /resultado 12 2 · confere à mão uma entrada de 1º tempo
@@ -1230,7 +1278,7 @@ const MENU = { inline_keyboard: [
   [BTN('🎯 Top 10 Chutes', '/topchutes'), BTN('🧱 Top 10 Faltas', '/topfaltas'), BTN('📋 Resumo', '/resumo')],
   [BTN('🕵️ Caçador', '/cacador'), BTN('🔥 Sequências', '/sequencias'), BTN('🟨 Árbitros', '/arbitros')],
   [BTN('📈 Tendência', '/tendencia'), BTN('🧪 Placar', '/estrategias')],
-  [BTN('🧠 Modelo BH', '/modelo'), BTN('📒 Testes', '/testes'), BTN('📬 Envio diário', '/receber')],
+  [BTN('🧠 Modelo BH', '/modelo'), BTN('📒 Testes', '/testes'), BTN('📬 Envio diário', '/receber')], [BTN('🎯 Odd mínima', '/odd')],
   [BTN('💼 Banca e ROI', '/banca'), BTN('🧪 Estratégias', '/estrategias'), BTN('🖼️ Cards do dia', '/cards')],
   [{ text: '📱 Abrir o app completo', url: APP_URL }],
 ] };
@@ -1247,7 +1295,7 @@ const HOJE = { inline_keyboard: [
 const MODELO_HUB = { inline_keyboard: [
   [BTN('🎯 Top 10 Chutes', '/topchutes'), BTN('🧱 Top 10 Faltas', '/topfaltas')],
   [BTN('🧠 Chance de uma linha', '/modelo'), BTN('📒 Meus testes', '/testes')],
-  [BTN('☀️ Resultado de ontem', '/ontem'), BTN('📬 Envio diário', '/receber')], [BTN('🧪 Estratégias', '/estrategias'), BTN('💼 Banca e ROI', '/banca')], [BTN('🏠 Menu', '/menu')]] };
+  [BTN('☀️ Resultado de ontem', '/ontem'), BTN('📬 Envio diário', '/receber'), BTN('🎯 Odd mínima', '/odd')], [BTN('🧪 Estratégias', '/estrategias'), BTN('💼 Banca e ROI', '/banca')], [BTN('🏠 Menu', '/menu')]] };
 const short = (s: string, n: number) => s.length > n ? s.slice(0, n - 1) + '.' : s;
 
 async function answer(text: string, chatId: number, page = 1): Promise<Out> {
@@ -1274,7 +1322,10 @@ async function answer(text: string, chatId: number, page = 1): Promise<Out> {
   if (cmd === 'estrategias' || cmd === 'estrategia') return estrategiasCmd(rest, chatId);
   if (cmd === 'gabarito') return gabaritoCmd();
   if (cmd === 'app') return { text: `📱 <b>App completo</b>\n${APP_URL}`, kb: { inline_keyboard: [[{ text: 'Abrir o app', url: APP_URL }], HOME] } };
+  if (cmd === 'odd' || cmd === 'oddminima') return oddCmd(chatId, rest);
   const d = await data();
+  // odd mínima do chat: as listas daqui para baixo usam este inRange/RANGE_TXT (mesmo nome, por chat)
+  const om = await userMin(chatId), inRange = (r: Row) => inRangeBase(r) && okOdd(oddOf(r), om), RANGE_TXT = rangeTxt(om);
   if (cmd === 'modelo') return modeloCmd(d, rest, chatId);
   if (cmd === 'cacador' || cmd === 'hunter') return cacadorCmd(d, rest, page);
   if (cmd === 'tendencia' || cmd === 'tendencias') return tendenciaCmd(d);
@@ -1283,7 +1334,7 @@ async function answer(text: string, chatId: number, page = 1): Promise<Out> {
   if (cmd === 'sequencias' || cmd === 'sequencia') return sequenciasCmd(d, rest, page);
   if (cmd === 'arbitros' || cmd === 'arbitro') return arbitrosCmd(d, page, await raiox());
   if (cmd === 'raiox' || cmd === 'raio') return raioxCmd(d, rest);
-  if (cmd === 'topchutes' || cmd === 'topfaltas') { const k = cmd === 'topfaltas' ? 'faltas' : 'chutes'; const T = MT[k]; return list(d, tops(d)[k], `${T.ic} TOP 10 MODELO BH · ${T.title}`, 10, raw, page, true, 'O Modelo BH ainda não rodou para os jogos de hoje, ou não há titulares prováveis com linha boa.', d.rows.some(r => r.d) ? ' · melhor casa' : ' · linha de referência'); }
+  if (cmd === 'topchutes' || cmd === 'topfaltas') { const k = cmd === 'topfaltas' ? 'faltas' : 'chutes'; const T = MT[k]; return list(d, tops(d, 10, om)[k], `${T.ic} TOP 10 MODELO BH · ${T.title}`, 10, raw, page, true, 'O Modelo BH ainda não rodou para os jogos de hoje, ou não há titulares prováveis com linha boa.', (d.rows.some(r => r.d) ? ' · melhor casa' : ' · linha de referência') + (om > ODD_MIN ? ` · odd ${n2(om)}+` : '')); }
   if (cmd === 'top') { const n = clampN(rest[0]); return list(d, open(d).filter(inRange), `🔥 TOP ${n} DO DIA`, n, raw, page, true, '', RANGE_TXT); }
   if (cmd === 'valor') return list(d, open(d).filter(r => r.d && r.e != null && r.e >= .03 && inRange(r)).sort((a, b) => (b.e! - a.e!)), '💰 VALOR COM ODD DE CASA', clampN(rest[0]), raw, page, true, '⏳ As odds entram quando as casas abrem as linhas e o leitor manda a foto. Tente mais perto dos jogos ou veja o Top do dia.', RANGE_TXT);
   if (cmd === 'seguras') return list(d, open(d).filter(r => r.p >= .65 && r.p <= .92 && r.st !== 'duvida' && r.st !== 'banco' && inRange(r) && (r.gr === 'A+' || r.gr === 'A')).sort((a, b) => (+!!b.d - +!!a.d) || b.p - a.p), '🛡️ MAIS SEGURAS (CHANCE ≥ 65%)', clampN(rest[0]), raw, page, true, '', RANGE_TXT);
@@ -1303,7 +1354,7 @@ async function answer(text: string, chatId: number, page = 1): Promise<Out> {
     const rows = d.rows.filter(r => r.k === 'p' && norm(r.n).includes(q)); if (!rows.length) return { text: `Nenhuma linha boa hoje para <b>${esc(arg)}</b>.`, kb: { inline_keyboard: [HOME] } };
     return list(d, rows, '👤 ' + rows[0].n.toUpperCase(), 12, raw, page, false);
   }
-  if (cmd === 'multipla') return multipla(d, rest[0]);
+  if (cmd === 'multipla') return multipla(d, rest[0], om);
   if (cmd === 'jogos') {
     const rowsTxt = d.games.map(g => `${hourBR(g.utc)}  ${(short(g.h, 13) + ' x ' + short(g.a, 13)).padEnd(29)} ${short(LG[g.lg]?.[1] ?? '', 10)}`).join('\n');
     return { text: header(d, '🗓️ JOGOS DE HOJE') + (d.games.length ? `\n<pre>HORA   JOGO                          LIGA\n${rowsTxt}</pre>\n${d.houses?.length ? `<i>🏠 Casas lidas: ${d.houses.map(h => `${esc(h.house)} (${hourBR(h.at)})`).join(', ')}</i>\n` : ''}Toque num jogo para ver as linhas:` : '\nSem jogos das ligas do projeto hoje.'),
@@ -1475,7 +1526,7 @@ Deno.serve(async (req: Request) => {
       ['faltas', 'Faltas cometidas'], ['sofridas', 'Faltas sofridas'], ['desarmes', 'Desarmes'], ['defesas', 'Defesas do goleiro'], ['times', 'Mercados de time'], ['totais', 'Totais do jogo'],
       ['jogo', 'Linhas de um jogo'], ['jogador', 'Linhas de um jogador'], ['cacador', 'Caçador de props (filtros)'], ['tendencia', 'Método Tendência'], ['sequencias', 'Sequências de 5+ jogos'], ['arbitros', 'Árbitros do dia'], ['raiox', 'Raio-X do jogo'], ['multipla', 'Múltipla (ex.: /multipla 3)'], ['jogos', 'Jogos de hoje'], ['desfalques', 'Desfalques'], ['resumo', 'Resumo da rodada'],
       ['cards', 'Melhores do dia em imagem'], ['pdf', 'PDF do dia'], ['modelo', 'Modelo BH: chance de qualquer linha'], ['testes', 'Testes do Modelo BH'], ['topchutes', 'Top 10 do modelo em chutes'], ['topfaltas', 'Top 10 em faltas e desarmes'],
-      ['receber', 'Receber os tops todo dia'], ['banca', 'Entradas registradas, lucro e ROI'], ['ontem', 'Resultado de ontem'], ['estrategias', 'Modelo por mercado: placar e entradas'], ['gabarito', 'Gabarito de ontem por mercado'],
+      ['receber', 'Receber os tops todo dia'], ['odd', 'Odd mínima das entradas'], ['banca', 'Entradas registradas, lucro e ROI'], ['ontem', 'Resultado de ontem'], ['estrategias', 'Modelo por mercado: placar e entradas'], ['gabarito', 'Gabarito de ontem por mercado'],
       ['hoje', 'Listas de hoje'], ['acessos', 'Acessos ao bot (administrador)'], ['ajuda', 'Todos os comandos'], ['app', 'Abrir o app']].map(([command, description]) => ({ command, description })) });
     const me = await TG('getMe', {}), info = await TG('getWebhookInfo', {});
     return json({ ok: !!hook.ok, webhook: hook, endereco: info.result?.url, erro_recente: info.result?.last_error_message ?? null, comandos: cmds.ok, bot: me.result?.username ? '@' + me.result.username : null });
