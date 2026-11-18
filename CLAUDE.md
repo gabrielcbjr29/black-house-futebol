@@ -17,7 +17,8 @@ Props de futebol com modelo próprio (Modelo BH), copiando a arquitetura do Blac
 ```
 API-Football Pro ─► GitHub Actions (relogio.yml dispara atualizar.yml às :20 e :50, 24h)
    testes → histórico (data/hist/*.ndjson) → calibração → build (slate, bot, hunt, raiox, strategies, results) → commit → cards + PDF → Pages
-Leitores Tampermonkey (99play, farra) no navegador do usuário ─► função linhas (Supabase)
+Tarefa agendada "Black House Futebol · Linhas da 99play" (navegador do app Claude no PC do usuário, :05 e :35) e
+leitores Tampermonkey (99play, farra) ─► função linhas (Supabase)
 Supabase mccxlgtiulpknubdiyrz: telegram-bot · estrategias · linhas · pg_cron (supabase/cron.sql)
 ```
 | Caminho | Papel |
@@ -35,6 +36,7 @@ Supabase mccxlgtiulpknubdiyrz: telegram-bot · estrategias · linhas · pg_cron 
 | `bot/estrategias/index.ts` | registro, alerta, monitor de risco, conferência |
 | `bot/linhas/index.ts` | recebe as fotos dos leitores |
 | `tools/navegador/` | leitores das casas (placeholder `__LINHAS_TOKEN__`, nunca o token real) |
+| `tools/c99-reader-futebol.js` | o mesmo leitor da 99play em formato de tarefa agendada (javascript_tool na aba da 99play); o token é lido da `bot_config` na hora |
 | `scripts/cards.mjs`, `scripts/pdf.mjs` | imagens e PDF do dia (Playwright) |
 
 ## Regras (não negociáveis)
@@ -68,6 +70,6 @@ A máquina de desenvolvimento pode não alcançar supabase.co/github.io; teste p
 - Checar o bot localmente: `deno check bot/telegram/index.ts`
 
 ## Pendências conhecidas
-- Leitores das casas ainda não instalados pelo usuário: sem eles não há odd de casa (estratégias não entram).
+- 99play: lida pela tarefa agendada (precisa do PC ligado com o app Claude aberto). farra.bet: só pelo Tampermonkey, ainda não instalado.
 - Escanteios, cartões e gols aparecem só como informação (Raio-X); modelo e estratégias continuam nos mercados de sempre.
 - Doc de estado no projeto do claude.ai: `claude/black-house-futebol-estado.md`.
