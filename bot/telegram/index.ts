@@ -716,14 +716,14 @@ async function settleStrats(rows: any[], res: any) {
     const a = res.stats[r.date]?.[r.pid]; if (!a) continue;
     const L = +(r.open_line ?? r.line), O = +(r.open_odd ?? r.odd);
     let status = 'void', result: number | null = null;
-    if (a[0] > 0) { result = a[RIDX[r.mk]]; status = result! > L ? 'green' : 'red'; }
+    if (a[0] > 0) { result = a[RIDX[r.mk]]; status = (r.side === 'u' ? result! < L : result! > L) ? 'green' : 'red'; }
     const patch = { status, result, profit: status === 'green' ? Math.round((O - 1) * 100) / 100 : status === 'red' ? -1 : 0, settled_at: new Date().toISOString() };
     Object.assign(r, patch);
     await sb(`strategy_picks?id=eq.${r.id}`, { method: 'PATCH', body: JSON.stringify(patch) }).catch(() => null);
   }
 }
 async function estGabarito(y: string, res: any) {
-  const rows: any[] = await sb(`strategy_picks?date=eq.${y}&select=id,date,strategy_id,pid,name,mk,line,odd,open_line,open_odd,odd_src,status,result,profit,clv_line,alerted,manual&order=first_at.asc`).catch(() => []) ?? [];
+  const rows: any[] = await sb(`strategy_picks?date=eq.${y}&select=id,date,strategy_id,pid,name,mk,side,line,odd,open_line,open_odd,odd_src,status,result,profit,clv_line,alerted,manual&order=first_at.asc`).catch(() => []) ?? [];
   if (!rows.length) return null;
   await settleStrats(rows, res);
   const stats: any[] = await sb('strategy_stats?select=*').catch(() => []) ?? [];
@@ -733,22 +733,22 @@ async function estGabarito(y: string, res: any) {
     for (const S of stats) {
       const a = rows.filter(x => x.strategy_id === S.id); if (!a.length) continue;
       const h = hitOf(a);
-      const lines = a.map(x => `${ic(x)} ${x.alerted ? '📬 ' : ''}${esc(x.name)} ⬆️ ${n1(+(x.open_line ?? x.line))} ${MKS[x.mk] ?? x.mk} @${n2(+(x.open_odd ?? x.odd))}${x.result != null ? ` <i>(fez ${n1(+x.result)})</i>` : x.manual && x.status === 'aberta' ? ` · conferir: <code>/resultado e${x.id} valor</code>` : ''}${x.clv_line != null && +x.clv_line !== 0 ? ` · fechou ${n1(+x.line)} (CLV ${+x.clv_line < 0 ? '+' : '−'}${n1(Math.abs(+x.clv_line))})` : ''}`).join('\n');
+      const lines = a.map(x => `${ic(x)} ${x.alerted ? '📬 ' : ''}${esc(x.name)} ${x.side === 'u' ? '⬇️' : '⬆️'} ${n1(+(x.open_line ?? x.line))} ${MKS[x.mk] ?? x.mk} @${n2(+(x.open_odd ?? x.odd))}${x.result != null ? ` <i>(fez ${n1(+x.result)})</i>` : x.manual && x.status === 'aberta' ? ` · conferir: <code>/resultado e${x.id} valor</code>` : ''}${x.clv_line != null && +x.clv_line !== 0 ? ` · fechou ${n1(+x.line)} (CLV ${(x.side === 'u' ? +x.clv_line > 0 : +x.clv_line < 0) ? '+' : '−'}${n1(Math.abs(+x.clv_line))})` : ''}`).join('\n');
       blocks.push(`<b>🧪 ${esc(S.name)}</b>: <b>${h.g}/${h.n}</b>${h.v ? ` (${h.v} anulada${h.v > 1 ? 's' : ''})` : ''} · <b>${u2(h.pr)}</b>${det ? `\n<blockquote>${lines}</blockquote>` : ''}\n<i>Acumulado: ${S.n} entradas · ${u2(+S.lucro || 0)} · ROI ${S.roi == null ? '–' : pctS(+S.roi)}</i>`);
     }
     const T = hitOf(rows), A = hitOf(rows.filter(x => x.alerted));
-    return `🧪 <b>GABARITO DO MODELO POR MERCADO · ${dateBR(y)}</b>\n<i>1u por entrada, na linha e odd do alerta</i>\n\n${blocks.join('\n\n')}\n\n📬 <b>Alertadas (EV mínimo): ${A.g}/${A.n} · ${u2(A.pr)} · ROI ${pctS(A.roi)}</b>\n📊 Todas do papel: ${T.g}/${T.n} · ${u2(T.pr)} · ROI ${pctS(T.roi)}\n<i>CLV = quanto a linha andou a nosso favor até o jogo começar (no MAIS, a linha que sobe depois da entrada é a favor).</i>`;
+    return `🧪 <b>GABARITO DO MODELO POR MERCADO · ${dateBR(y)}</b>\n<i>1u por entrada, na linha e odd do alerta</i>\n\n${blocks.join('\n\n')}\n\n📬 <b>Alertadas (EV mínimo): ${A.g}/${A.n} · ${u2(A.pr)} · ROI ${pctS(A.roi)}</b>\n📊 Todas do papel: ${T.g}/${T.n} · ${u2(T.pr)} · ROI ${pctS(T.roi)}\n<i>CLV = quanto a linha andou a nosso favor até o jogo começar (no MAIS, a linha que sobe; no MENOS, a que desce).${det ? '' : ' Entrada por entrada: aba Planilha do app.'}</i>`;
   };
   const text = build(true);
   return text.length <= 4090 ? text : build(false);
 }
 async function gabaritoCmd(): Promise<Out> {
   const y = dayBR(Date.now() - 864e5), res = await getResults();
-  const kb = { inline_keyboard: [[BTN('🧪 Placar das estratégias', '/estrategias'), BTN('💼 Banca', '/banca')], [BTN('🏠 Menu', '/menu')]] };
+  const kb = { inline_keyboard: [[BTN('🧪 Placar das estratégias', '/estrategias'), BTN('💼 Banca', '/banca')], [{ text: '📊 Planilha no app', url: APP_URL + '#planilha' }], [BTN('🏠 Menu', '/menu')]] };
   if (!res?.dates?.includes(y)) return { text: `Os resultados de ${dateBR(y)} ainda não saíram (a coleta das 6h traz). Tente mais tarde.`, kb };
   return { text: (await estGabarito(y, res)) ?? `Nenhuma entrada de estratégia gravada em ${dateBR(y)}.`, kb };
 }
-const MORNING_KB = () => ({ inline_keyboard: [[BTN('💼 Minha banca', '/banca'), BTN('🧪 Gabarito das estratégias', '/gabarito')], [BTN('🧠 Modelo BH', '/modelobh'), BTN('🏠 Menu', '/menu')]] });
+const MORNING_KB = () => ({ inline_keyboard: [[BTN('💼 Minha banca', '/banca'), BTN('🧪 Gabarito das estratégias', '/gabarito')], [{ text: '📊 Planilha no app', url: APP_URL + '#planilha' }], [BTN('🧠 Modelo BH', '/modelobh'), BTN('🏠 Menu', '/menu')]] });
 async function ontemCmd(chatId: number): Promise<Out> {
   const y = dayBR(Date.now() - 864e5), res = await getResults();
   if (!res?.dates?.includes(y)) return { text: `Os resultados de ${dateBR(y)} ainda não saíram (a coleta das 6h traz). Tente mais tarde.`, kb: MORNING_KB() };
@@ -776,7 +776,7 @@ async function morningPush(force = false) {
       await new Promise(ok => setTimeout(ok, 60));
     }
     if (gab && subs.some(x => +x.chat_id === c && x.est)) {
-      const r = await TG('sendMessage', { chat_id: c, text: gab, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: { inline_keyboard: [[BTN('🧪 Placar das estratégias', '/estrategias'), BTN('💼 Banca', '/banca')], [BTN('🏠 Menu', '/menu')]] } });
+      const r = await TG('sendMessage', { chat_id: c, text: gab, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: { inline_keyboard: [[BTN('🧪 Placar das estratégias', '/estrategias'), BTN('💼 Banca', '/banca')], [{ text: '📊 Planilha no app', url: APP_URL + '#planilha' }], [BTN('🏠 Menu', '/menu')]] } });
       if (r.ok) sent++;
       await new Promise(ok => setTimeout(ok, 60));
     }
@@ -815,7 +815,7 @@ function multipla(d: Data, arg: string | undefined): Out {
   const v = arg ? parseFloat(arg.replace(',', '.')) : NaN;
   const target = Number.isFinite(v) && v >= 1.3 && !(Number.isInteger(v) && v <= 8) ? v : null;
   const legs = target ? 8 : Math.max(2, Math.min(6, Number.isFinite(v) ? v : 3));
-  const cand = open(d).filter(r => (r.gr === 'A+' || r.gr === 'A') && r.d && r.d >= ODD_MIN && r.d <= ODD_MAX && (r.e ?? 0) >= 0 && (r.e ?? 0) <= .15 && r.st !== 'duvida' && r.st !== 'banco' && !/1$/.test(r.m))
+  const cand = open(d).filter(r => (r.gr === 'A+' || r.gr === 'A') && r.d && r.d >= ODD_MIN && r.d <= ODD_MAX && (r.e ?? 0) >= 0 && r.st !== 'duvida' && r.st !== 'banco' && !/1$/.test(r.m))
     .sort((a, b) => b.nt - a.nt);
   const pick: Row[] = [], games = new Set<number>(); let odd = 1, p = 1;
   for (const r of cand) { if (target ? odd >= target : pick.length >= legs) break; if (pick.length >= 8) break; if (games.has(r.g)) continue; games.add(r.g); pick.push(r); odd *= r.d!; p *= r.p; }
@@ -1209,7 +1209,7 @@ const HELP = `<b>📖 COMANDOS</b>
 /resultado 12 2 · confere à mão uma entrada de 1º tempo
 /ontem · resultado de ontem (chega sozinho de manhã)
 /estrategias · modelo por mercado: placar e entradas do dia
-/gabarito · resultado de ontem de cada mercado
+/gabarito · resultado de ontem de cada mercado (chega sozinho de manhã, ~8h)
 /app · app completo
 
 <b>Como usar as listas</b>
@@ -1285,7 +1285,7 @@ async function answer(text: string, chatId: number, page = 1): Promise<Out> {
   if (cmd === 'raiox' || cmd === 'raio') return raioxCmd(d, rest);
   if (cmd === 'topchutes' || cmd === 'topfaltas') { const k = cmd === 'topfaltas' ? 'faltas' : 'chutes'; const T = MT[k]; return list(d, tops(d)[k], `${T.ic} TOP 10 MODELO BH · ${T.title}`, 10, raw, page, true, 'O Modelo BH ainda não rodou para os jogos de hoje, ou não há titulares prováveis com linha boa.', d.rows.some(r => r.d) ? ' · melhor casa' : ' · linha de referência'); }
   if (cmd === 'top') { const n = clampN(rest[0]); return list(d, open(d).filter(inRange), `🔥 TOP ${n} DO DIA`, n, raw, page, true, '', RANGE_TXT); }
-  if (cmd === 'valor') return list(d, open(d).filter(r => r.d && r.e != null && r.e >= .03 && r.e <= .15 && inRange(r)).sort((a, b) => (b.e! - a.e!)), '💰 VALOR COM ODD DE CASA', clampN(rest[0]), raw, page, true, '⏳ As odds entram quando as casas abrem as linhas e o leitor manda a foto. Tente mais perto dos jogos ou veja o Top do dia.', RANGE_TXT);
+  if (cmd === 'valor') return list(d, open(d).filter(r => r.d && r.e != null && r.e >= .03 && inRange(r)).sort((a, b) => (b.e! - a.e!)), '💰 VALOR COM ODD DE CASA', clampN(rest[0]), raw, page, true, '⏳ As odds entram quando as casas abrem as linhas e o leitor manda a foto. Tente mais perto dos jogos ou veja o Top do dia.', RANGE_TXT);
   if (cmd === 'seguras') return list(d, open(d).filter(r => r.p >= .65 && r.p <= .92 && r.st !== 'duvida' && r.st !== 'banco' && inRange(r) && (r.gr === 'A+' || r.gr === 'A')).sort((a, b) => (+!!b.d - +!!a.d) || b.p - a.p), '🛡️ MAIS SEGURAS (CHANCE ≥ 65%)', clampN(rest[0]), raw, page, true, '', RANGE_TXT);
   if (GROUPS[cmd]) { const g = GROUPS[cmd]; return list(d, open(d).filter(r => g.mk.includes(r.m) && inRange(r)), `${g.ic} ${g.title.toUpperCase()}`, clampN(rest[0]), raw, page, g.mk.length === 1, '', RANGE_TXT); }
   if (cmd === 'jogo') {
@@ -1317,7 +1317,7 @@ async function answer(text: string, chatId: number, page = 1): Promise<Out> {
     return { text: header(d, '🚑 DESFALQUES') + '\n' + (txt ? `<blockquote expandable>${txt}</blockquote>` : 'Nenhum desfalque listado.') + '\n<i>🔴 fora · 🟡 dúvida</i>', kb: { inline_keyboard: [home('/desfalques')] } };
   }
   if (cmd === 'resumo') {
-    const o = open(d), a = o.filter(r => r.gr === 'A+' || r.gr === 'A'), ap = o.filter(r => r.gr === 'A+'), val = o.filter(r => r.d && (r.e ?? 0) >= .03 && (r.e ?? 0) <= .15);
+    const o = open(d), a = o.filter(r => r.gr === 'A+' || r.gr === 'A'), ap = o.filter(r => r.gr === 'A+'), val = o.filter(r => r.d && (r.e ?? 0) >= .03);
     const out = (d.inj ?? []).filter(p => p.st === 'out').length, lu = d.games.filter(g => g.fase === 'escalacao').length;
     const top = o.find(inRange);
     const first = d.games.slice().sort((x, y) => x.utc.localeCompare(y.utc))[0];

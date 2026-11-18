@@ -4,6 +4,7 @@
 //   ?settle=<WEBHOOK_SECRET>  confere as entradas abertas com os resultados (pg_cron)
 //   ?csv=<REPORT_TOKEN>       todas as entradas em CSV (planilha)
 //   ?stats=1                  placar por estratégia (view strategy_stats)
+//   ?planilha=1               planilha do app: placar + todas as entradas do papel e do Top 10 (sem dados de usuário)
 const APP = 'https://gabrielcbjr29.github.io/black-house-futebol/data/';
 // índice de cada mercado no results.json (jogador: [min, chutes, no gol, faltas com., faltas sofr., desarmes, defesas];
 // time e jogo: [90, chutes, no gol, faltas]). 1º tempo do jogador: conferência manual (a API não traz por tempo).
@@ -287,6 +288,16 @@ Deno.serve(async (req: Request) => {
     if (u.searchParams.get('record') && u.searchParams.get('record') === secret) return json(await record(u.searchParams.get('silent') === '1'));
     if (u.searchParams.get('settle') && u.searchParams.get('settle') === secret) return json(await settle());
     if (u.searchParams.get('stats')) return json(await sb('strategy_stats?select=*&order=lucro.desc.nullslast'));
+    // planilha pública do método: placar, entradas do papel e do Top 10 (sem apostas nem chats de usuário)
+    if (u.searchParams.get('planilha')) {
+      const desde = new Date(Date.now() - 180 * 864e5).toISOString().slice(0, 10);
+      const [est, picks, tops] = await Promise.all([
+        sb('strategy_stats?select=*&order=lucro.desc.nullslast'),
+        sb(`strategy_picks?date=gte.${desde}&select=id,date,strategy_id,name,team,opp,gid,mk,side,line,odd,odd_src,p,edge,nota,tip_utc,fase,status,result,profit,open_line,open_odd,clv_line,clv_odd,alerted,risk,p_now,first_at,manual&order=date.desc,first_at.asc&limit=10000`),
+        sb(`top_picks?date=gte.${desde}&select=id,date,list,rank,name,team,opp,mk,side,line,odd,odd_src,p,nota,status,result,profit,open_line,open_odd,clv_line,clv_odd,tip_utc,first_at&order=date.desc,list.asc,rank.asc&limit=10000`),
+      ]);
+      return new Response(JSON.stringify({ gen: new Date().toISOString(), estrategias: est ?? [], picks: picks ?? [], tops: tops ?? [] }), { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=60', 'Access-Control-Allow-Origin': '*' } });
+    }
     const rep = await cfg('REPORT_TOKEN');
     if (rep && u.searchParams.get('csv') === rep) {
       const rows: any[] = await sb('strategy_picks?select=*,strategies(name)&order=date.asc,strategy_id.asc,id.asc&limit=20000') ?? [];

@@ -3,6 +3,7 @@ import { MARKETS, playerOver, nbOver, ev } from './engine.js';
 import { PRESETS, DEFAULT, HUNT_MK, preset, run as huntRun } from './hunter.js';
 import { avatarSVG } from './avatar.js';
 import { raioxHTML, RXO, trendsHTML, TRO, refsHTML, ARO } from './raiox.js';
+import { planilhaHTML, PO, csvOf } from './planilha.js';
 
 const FN = 'https://mccxlgtiulpknubdiyrz.supabase.co/functions/v1/';
 const LG = { 39: ['🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Premier League'], 140: ['🇪🇸', 'La Liga'], 135: ['🇮🇹', 'Serie A'], 78: ['🇩🇪', 'Bundesliga'], 61: ['🇫🇷', 'Ligue 1'], 71: ['🇧🇷', 'Brasileirão'], 2: ['🏆', 'Champions'] };
@@ -111,12 +112,6 @@ function renderGames() {
       <p class="meta">${g.fase === 'escalacao' ? '✅ escalação oficial' : '🕐 antes da escalação'} · ${rows.filter(r => r.d).length} linhas de time com odd de casa · <b>🔎 Raio-X</b></p></div>`;
   }).join('') || '<p class="hint">Sem jogos das ligas do projeto hoje.</p>';
 }
-async function renderStrategies() {
-  const MK = Object.fromEntries(Object.entries(MARKETS).map(([k, v]) => [k, v.lb]));
-  $('#picks').innerHTML = ST?.picks?.length ? `<table><tr><th>Estratégia</th><th>Alvo</th><th>Mercado</th><th class="r">Linha</th><th class="r">Odd</th><th>Casa</th><th class="r">Chance</th><th class="r">EV</th><th class="r">Hora</th></tr>${ST.picks.map(p => `<tr><td>${esc(p.strategy_id)}</td><td>${esc(p.name)}</td><td>${esc(MK[p.mk])}</td><td class="r">+${n1(p.line)}</td><td class="r">${n2(p.odd)}</td><td>${esc(p.odd_src)}</td><td class="r">${pc(p.p)}</td><td class="r ${p.edge >= 0 ? 'pos' : 'neg'}">${pct(p.edge)}</td><td class="r">${hour(p.tip_utc)}</td></tr>`).join('')}</table>` : '<p class="hint">Sem entradas hoje (as estratégias só entram com linha e odd de casa).</p>';
-  const s = await fetch(FN + 'estrategias?stats=1').then(r => r.ok ? r.json() : null).catch(() => null);
-  $('#stats').innerHTML = Array.isArray(s) && s.length ? `<table><tr><th>Estratégia</th><th class="r">Entradas</th><th class="r">Green</th><th class="r">Lucro</th><th class="r">ROI</th><th class="r">CLV odd</th><th class="r">EV médio</th><th class="r">Abertas</th></tr>${s.map(x => `<tr><td>${esc(x.name)}</td><td class="r">${x.n}</td><td class="r">${x.g}</td><td class="r ${x.lucro >= 0 ? 'pos' : 'neg'}">${x.lucro == null ? '–' : (x.lucro >= 0 ? '+' : '') + n2(+x.lucro) + 'u'}</td><td class="r">${x.roi == null ? '–' : pct(+x.roi)}</td><td class="r">${x.clv_odd_media == null ? '–' : pct(+x.clv_odd_media)}</td><td class="r">${x.edge_medio == null ? '–' : pct(+x.edge_medio)}</td><td class="r">${x.abertas}</td></tr>`).join('')}</table>` : '<p class="hint">Ainda sem entradas conferidas.</p>';
-}
 async function renderGuide() {
   $('#houses').innerHTML = D.houses?.length ? `<table>${D.houses.map(h => `<tr><td>${esc(h.house)}</td><td class="r">${h.n} linhas</td><td class="r">${new Date(h.at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</td></tr>`).join('')}</table>` : '<p class="hint">Nenhuma casa lida nas últimas 18 horas.</p>';
   const c = await get('calib.json');
@@ -182,11 +177,26 @@ async function renderRefs() {
   if (!(await loadRX())) { $('#refs').innerHTML = '<p class="hint">Os árbitros ainda não foram publicados.</p>'; return; }
   $('#refs').innerHTML = refsHTML(RX, ARO);
 }
+// ---------- Planilha do método ----------
+let PL = null, PLAT = 0;
+async function renderPlanilha(force = false) {
+  if (force || !PL || Date.now() - PLAT > 60_000) { PL = await fetch(FN + 'estrategias?planilha=1&t=' + Math.floor(Date.now() / 60_000)).then(r => r.ok ? r.json() : null).catch(() => null); PLAT = Date.now(); }
+  $('#planilha').innerHTML = PL ? planilhaHTML(PL, PO) : '<p class="hint">A planilha não carregou agora. Tente de novo em instantes.</p>';
+}
+function initPlanilha() {
+  const el = $('#planilha');
+  el.addEventListener('click', e => {
+    const b = e.target.closest('.seg2 button'); if (b) { const k = b.parentElement.dataset.k; PO[k] = b.dataset.v; if (k === 'src') PO.est = ''; renderPlanilha(); return; }
+    if (e.target.id === 'plCsv' && PL) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csvOf(PL, PO)], { type: 'text/csv;charset=utf-8' })); a.download = `black-house-futebol-planilha-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
+  });
+  el.addEventListener('change', e => { const m = { plEst: 'est', plMk: 'mk', plSt: 'st' }[e.target.id]; if (m) PO[m] = e.target.value; else if (e.target.id === 'plAl') PO.al = e.target.checked; else return; renderPlanilha(); });
+}
 function route() {
-  const v = (location.hash || '#entradas').slice(1);
+  let v = (location.hash || '#entradas').slice(1);
+  if (v === 'estrategias') v = 'planilha'; // link antigo
   for (const s of document.querySelectorAll('.view')) s.hidden = s.id !== 'v-' + v;
   for (const a of document.querySelectorAll('.tabs a')) a.classList.toggle('on', a.getAttribute('href') === '#' + v);
-  if (v === 'estrategias') renderStrategies(); if (v === 'guia') renderGuide(); if (v === 'cacador') renderHunt();
+  if (v === 'planilha') renderPlanilha(); if (v === 'guia') renderGuide(); if (v === 'cacador') renderHunt();
   if (v === 'tendencias') renderTrends(); if (v === 'arbitros') renderRefs();
 }
 async function main() {
@@ -198,7 +208,7 @@ async function main() {
   $('#fMk').innerHTML += Object.entries(MARKETS).map(([k, v]) => `<option value="${k}">${v.lb}</option>`).join('');
   $('#fGame').innerHTML += D.games.map(g => `<option value="${g.id}">${hour(g.utc)} ${esc(g.h)} x ${esc(g.a)}</option>`).join('');
   for (const id of ['#q', '#fLg', '#fMk', '#fGame', '#fOdd', '#fOne', '#fSort']) $(id).addEventListener('input', renderList);
-  initHunt();
+  initHunt(); initPlanilha();
   $('#list').addEventListener('click', e => { const b = e.target.closest('.card'); if (b) detail(VIEW[+b.dataset.i]); });
   $('#games').addEventListener('click', e => { const c = e.target.closest('.game[data-g]'); if (c) openRaiox(+c.dataset.g); });
   $('#games').addEventListener('keydown', e => { const c = e.target.closest('.game[data-g]'); if (c && e.key === 'Enter') openRaiox(+c.dataset.g); });

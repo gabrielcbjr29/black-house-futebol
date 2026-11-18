@@ -37,6 +37,7 @@ Supabase mccxlgtiulpknubdiyrz: telegram-bot · estrategias · linhas · pg_cron 
 | `bot/linhas/index.ts` | recebe as fotos dos leitores |
 | `tools/navegador/` | leitores das casas (placeholder `__LINHAS_TOKEN__`, nunca o token real) |
 | `tools/c99-reader-futebol.js` | o mesmo leitor da 99play em formato de tarefa agendada (javascript_tool na aba da 99play); o token é lido da `bot_config` na hora |
+| `public/planilha.js` | aba Planilha do app: placar + todas as entradas (papel e Top 10), quebras por estratégia, mercado, faixa de EV e de odd, gabarito, CSV; lê `estrategias?planilha=1` (sem dados de usuário) |
 | `scripts/cards.mjs`, `scripts/pdf.mjs` | imagens e PDF do dia (Playwright) |
 
 ## Regras (não negociáveis)
@@ -71,5 +72,6 @@ A máquina de desenvolvimento pode não alcançar supabase.co/github.io; teste p
 
 ## Pendências conhecidas
 - 99play: lida pela tarefa agendada (precisa do PC ligado com o app Claude aberto). farra.bet: só pelo Tampermonkey, ainda não instalado.
+- EV: sem teto (decisão do usuário em 18/11); só mínimo. O aviso "muito acima do mercado" (EV > 15%) é informativo.
 - Escanteios, cartões e gols aparecem só como informação (Raio-X); modelo e estratégias continuam nos mercados de sempre.
 - Doc de estado no projeto do claude.ai: `claude/black-house-futebol-estado.md`.
