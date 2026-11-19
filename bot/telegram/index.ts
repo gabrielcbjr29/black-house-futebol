@@ -147,6 +147,8 @@ const whoB = (r: Row, i?: number) => `<b>${i != null ? i + '. ' : ''}${r.k === '
 const STL = (r: { st?: string; ps?: number }) => r.st === 'xi' ? '✅ titular confirmado' : r.st === 'banco' ? '🪑 no banco' : r.st === 'duvida' ? '🟡 em dúvida' : r.st === 'provavel' ? `🕐 provável titular (${pc(r.ps ?? 0)})` : '';
 // sequência dos últimos 10 (mais recente primeiro): 🟩 bateu (mais que a linha), 🟥 não bateu
 const seq = (r: Row) => r.sq?.length ? r.sq.join('-') : '';
+// sequência em fonte mono: no Telegram, um toque copia (do jogo mais recente para o mais antigo)
+const seqC = (v: (number | string)[] | null | undefined) => v?.length ? `🔢 <code>${v.join('-')}</code>` : '';
 function sqDots(vals: number[] | null | undefined, line: number, n = 10, u = false) {
   const v = (vals ?? []).slice(0, n).map(Number); if (!v.length) return { dots: '', hit: 0, n: 0 };
   let hit = 0; const dots = v.map(x => { const ok = u ? x < line : x > line; if (ok) hit++; return ok ? '🟩' : '🟥'; }).join('');
@@ -192,7 +194,7 @@ const rigor = (f: number) => f >= 1.07 ? '🔴 <b>rigoroso</b>' : f <= 0.93 ? '�
 function hitsTxt(r: Row) {
   if (r.k === 'j') return r.jh?.length ? `📊 Total nos últimos 5 · ${esc(r.t)}: <b>${r.jh.slice(0, 5).join('-')}</b> · ${esc(r.o)}: <b>${(r.ja ?? []).slice(0, 5).join('-')}</b>` : '';
   if (/1$/.test(r.m)) return '📊 <i>1º tempo: sem histórico por jogador; a chance usa a fatia do 1º tempo da liga</i>';
-  return `📊 L5 ${hitTxt(r.h5)} · L10 ${hitTxt(r.hit)}${r.k === 'p' ? ' <i>como titular</i>' : ''}${seq(r) ? `\n${sqLine(r.sq, r.l, r.s === 'u')} · <i>${seq(r)}</i>` : ''}`;
+  return `📊 L5 ${hitTxt(r.h5)} · L10 ${hitTxt(r.hit)}${r.k === 'p' ? ' <i>como titular</i>' : ''}${seq(r) ? `\n${sqLine(r.sq, r.l, r.s === 'u')}\n${seqC(r.sq)}` : ''}`;
 }
 // odd lida há 2 h ou mais (leitor parado): avisa para conferir
 const STALE = 2 * 3600e3;
@@ -271,12 +273,12 @@ function compact(r: Row, i: number) {
   return `<b>${i}. ${esc(r.n)}</b> <i>(${esc(r.t)}) ${esc(vsTxt(r))} · ${hourBR(r.utc)}</i>
 ⬆️ Mais de <b>${n1(r.l)}</b> ${MK[r.m] ?? r.m} · <b>${pc(r.p)}</b> · Nota <b>${r.nt}</b>
 ${lineSrc(r)}
-📊 L5 ${hitTxt(r.h5)} · L10 ${hitTxt(r.hit)} · 🧠 ${n1(r.pj)}${r.ms ? ` · ⏱️ ~${r.ms} min` : ''}${r.st === 'xi' ? ' · ✅ titular' : ''}${seq(r) ? `\n${sqLine(r.sq, r.l)}\n<i>🔢 ${seq(r)}</i>` : ''}`;
+📊 L5 ${hitTxt(r.h5)} · L10 ${hitTxt(r.hit)} · 🧠 ${n1(r.pj)}${r.ms ? ` · ⏱️ ~${r.ms} min` : ''}${r.st === 'xi' ? ' · ✅ titular' : ''}${seq(r) ? `\n${sqLine(r.sq, r.l, r.s === 'u')}\n${seqC(r.sq)}` : ''}`;
 }
 function topText(d: Data, key: string, om = 0) {
   const T = MT[key], top = tops(d, 10, om)[key];
   if (!top.length) return null;
-  return `<b>${T.ic} TOP 10 MODELO BH · ${T.title}</b>\n<i>${dateBR(d.date)} · ${d.games.length} jogos · atualizado ${hourBR(d.gen)}</i>\n\n` + top.map((r, i) => compact(r, i + 1)).join('\n\n') + '\n' + MT_NOTE(d) + '\n<i>📝 Toque no número para registrar a entrada (1u) com a sua odd. 🔢 = sequência dos últimos 10 como titular (mais recente primeiro).</i>' + (om > ODD_MIN ? `\n<i>🎯 Só odd ${n2(om)} ou mais (sua odd mínima).</i>` : '') + FOOT;
+  return `<b>${T.ic} TOP 10 MODELO BH · ${T.title}</b>\n<i>${dateBR(d.date)} · ${d.games.length} jogos · atualizado ${hourBR(d.gen)}</i>\n\n` + top.map((r, i) => compact(r, i + 1)).join('\n\n') + '\n' + MT_NOTE(d) + '\n<i>📝 Toque no número para registrar a entrada (1u) com a sua odd. 🔢 = sequência dos últimos 10 como titular (mais recente primeiro; toque para copiar).</i>' + (om > ODD_MIN ? `\n<i>🎯 Só odd ${n2(om)} ou mais (sua odd mínima).</i>` : '') + FOOT;
 }
 function shareText(r: Row, i?: number) {
   const head = `${i != null ? `${i}. ` : '⚽ '}${r.k === 'p' ? `${r.n} (${r.t})` : r.n} · ${vsTxt(r)} · ${hourBR(r.utc)}`;
@@ -1031,6 +1033,7 @@ function sequenciasCmd(d: Data, rest: string[], page: number): Out {
   const pages = Math.ceil(items.length / 10), pg = Math.max(1, Math.min(pages, page)), sl = items.slice((pg - 1) * 10, pg * 10);
   const body = sl.map((x, i) => `<b>${(pg - 1) * 10 + i + 1}. ${esc(x.m.n)}</b> <i>(${esc(x.m.tn)})</i> · ${hourBR(x.m.utc)}
 🔥 <b>${x.sk} seguidos</b> com mais de ${n1(x.l)} ${MK[x.mk]}${x.sk === x.n ? ' <i>(todos os últimos ' + x.n + ')</i>' : ''}
+${seqC(x.m.sq?.[MSTAT[x.mk]]?.slice(0, 10))}
 🧠 Modelo <b>${pc(x.p)}</b> · ${x.row ? `<code>@${n2(x.row.d!)}</code> ${esc(x.row.b ?? '')} · EV <b>${evS(x.row.e)}</b>` : `odd justa <code>@${n2(1 / Math.max(x.p, .01))}</code>`}`).join('\n\n');
   const nav = [pg > 1 ? BTN('◀', `p:${pg - 1}:${cmd}`) : null, pages > 1 ? BTN(`${pg}/${pages}`, `p:${pg}:${cmd}`) : null, pg < pages ? BTN('▶', `p:${pg + 1}:${cmd}`) : null].filter(Boolean) as { text: string; callback_data: string }[];
   return { text: header(d, '🔥 SEQUÊNCIAS' + (only ? ' · ' + MKN[only].toUpperCase() : ''), ` · ${items.length} na lista`) + `\n<blockquote>${body}</blockquote>
@@ -1089,7 +1092,7 @@ async function seqTimesCmd(d: Data, page: number): Promise<Out> {
   const cmd = '/sequencias times';
   if (!items.length) return { text: header(d, '🔥 SEQUÊNCIAS · TIMES E JOGO') + '\nNenhuma sequência de 8+ hoje em chutes, no gol e faltas.\n' + FOOT, kb: { inline_keyboard: [[BTN('👤 Jogadores', '/sequencias')], HOME] } };
   const pages = Math.ceil(items.length / 12), pg = Math.max(1, Math.min(pages, page)), sl = items.slice((pg - 1) * 12, pg * 12);
-  const body = sl.map(t => `${t.b ? '✅ ' : '• '}${trTxt(t, X.tn[t.t])}\n   <i>${hourBR(G[t.g].utc)} ${esc(X.tn[G[t.g].h])} x ${esc(X.tn[G[t.g].a])} · ${t.vals.join('-')}</i>`).join('\n');
+  const body = sl.map(t => `${t.b ? '✅ ' : '• '}${trTxt(t, X.tn[t.t])}\n   <i>${hourBR(G[t.g].utc)} ${esc(X.tn[G[t.g].h])} x ${esc(X.tn[G[t.g].a])}</i> · <code>${t.vals.join('-')}</code>`).join('\n');
   const nav = [pg > 1 ? BTN('◀', `p:${pg - 1}:${cmd}`) : null, pages > 1 ? BTN(`${pg}/${pages}`, `p:${pg}:${cmd}`) : null, pg < pages ? BTN('▶', `p:${pg + 1}:${cmd}`) : null].filter(Boolean) as { text: string; callback_data: string }[];
   return { text: header(d, '🔥 SEQUÊNCIAS · TIMES E JOGO', ` · ${items.length}`) + `\n<blockquote>${body}</blockquote>
 <i>8/9 = em 8 dos últimos 9 (no máximo 1 erro), no mando de hoje quando dá. ✅ = a do jogo também vale nos jogos do adversário. Sequência é informação, não motivo: confira a linha e a odd (/totais, /times).</i>
