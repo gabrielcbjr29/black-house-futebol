@@ -80,3 +80,14 @@ test('calibração v2 no motor: fator por liga, curva na chance e volta ao norma
     assert.equal(E.playerOver({ start: 1, bench: 0 }, 'FC', 0.5, 1, 0), p0);
   } finally { for (const k of Object.keys(E.MARKETS.FC)) delete E.MARKETS.FC[k]; Object.assign(E.MARKETS.FC, keep); }
 });
+test('registro de preços: guarda a primeira e a última leitura antes do jogo, ignora sem odd e jogo começado', async () => {
+  const { updatePrices } = await import('../collector/precos.js');
+  const now = Date.parse('2026-11-19T15:00:00Z'), utc = '2026-11-19T20:00:00Z';
+  const row = (o, at, extra = {}) => ({ id: '1', m: 'SH', s: 'o', l: 1.5, p: 0.6, d: o, b: '99play', at, utc, g: 9, lg: 71, ...extra });
+  const P = {};
+  assert.equal(updatePrices(P, { rows: [row(1.9, 'a'), row(null, 'a', { id: '2' }), row(2, 'a', { id: '3', utc: '2026-11-19T14:00:00Z' })] }, now), 1);
+  assert.equal(updatePrices(P, { rows: [row(1.9, 'a')] }, now + 6e4), 0);
+  assert.equal(updatePrices(P, { rows: [row(1.75, 'b')] }, now + 12e4), 1);
+  const e = P['1|SH|o|1.5'];
+  assert.equal(e.a.o, 1.9); assert.equal(e.z.o, 1.75); assert.equal(e.z.h, '99play'); assert.equal(Object.keys(P).length, 1);
+});

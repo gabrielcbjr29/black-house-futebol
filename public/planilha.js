@@ -51,6 +51,9 @@ export function resumo(a) {
 }
 const grupos = (a, key) => { const m = new Map(); for (const x of a) { const k = key(x); if (k == null) continue; if (!m.has(k)) m.set(k, []); m.get(k).push(x); } return [...m.entries()].map(([k, l]) => ({ k, ...resumo(l) })); };
 const FAIXA_EV = x => x.ev == null ? null : x.ev < 0.05 ? '0–5%' : x.ev < 0.10 ? '5–10%' : x.ev < 0.20 ? '10–20%' : x.ev < 0.40 ? '20–40%' : '40%+';
+// exposição: quantas entradas do filtro caíram no mesmo jogo, no mesmo dia
+export const exposicao = a => { const m = new Map(); for (const x of a) if (x.gid != null) { const k = x.date + '|' + x.gid; m.set(k, (m.get(k) ?? 0) + 1); }
+  return x => { const n = x.gid == null ? null : m.get(x.date + '|' + x.gid); return n == null ? null : n === 1 ? '1 entrada no jogo' : n === 2 ? '2 no mesmo jogo' : '3+ no mesmo jogo'; }; };
 const FAIXA_ODD = x => !x.O ? null : x.O < 1.6 ? '1,40–1,59' : x.O < 1.9 ? '1,60–1,89' : x.O < 2.3 ? '1,90–2,29' : x.O < 3 ? '2,30–2,99' : '3,00+';
 const ORD = { '0–5%': 0, '5–10%': 1, '10–20%': 2, '20–40%': 3, '40%+': 4, '1,40–1,59': 0, '1,60–1,89': 1, '1,90–2,29': 2, '2,30–2,99': 3, '3,00+': 4 };
 
@@ -102,6 +105,7 @@ export function planilhaHTML(P, o = PO) {
     + tabela('Por faixa de EV', grupos(R, FAIXA_EV).sort((a, b) => ORD[a.k] - ORD[b.k]), x => 'EV ' + x.k, 'Mostra se o EV que o modelo vê vira lucro de verdade, faixa por faixa.')
     + tabela('Por faixa de odd', grupos(R, FAIXA_ODD).sort((a, b) => ORD[a.k] - ORD[b.k]), x => '@' + x.k)
     + tabela('Por lado', grupos(R, x => x.side === 'u' ? 'Menos de' : 'Mais de'), x => x.k)
+    + tabela('Exposição por jogo', grupos(R, exposicao(R)).sort((a, b) => a.k.localeCompare(b.k)), x => x.k, 'Entradas do mesmo jogo andam juntas: um jogo travado derruba todas. Os alertas param em 2 por jogo (os de maior EV); aqui dá para ver se juntar mais no mesmo jogo paga ou não.')
     + gab + full + `<p class="hint">Papel: 1u por entrada, na linha e odd do alerta. Conferido com o resultado oficial do jogo. Atualizado ${hBR(P.gen)}. 🔞 18+ · jogue com responsabilidade.</p>`;
 }
 /* CSV das entradas do filtro (abre no Excel e no Google Sheets) */

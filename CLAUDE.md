@@ -77,6 +77,15 @@ log loss nos últimos 60 dias fora da amostra: {cru, fator global, fator por lig
 O bot.json leva `cal` (k e curva por mercado): o bot, o monitor de risco (estrategias) e o site aplicam a mesma curva.
 As regras das estratégias não mudaram; mudou só o modelo (as entradas a partir de 19/11 usam a chance calibrada).
 
+## Regras do método (19/11/2026)
+- **Exposição por jogo:** no máximo 2 alertas por jogo no dia (`bot_config` `ALERT_POR_JOGO`), ficam os de maior EV. O papel continua
+  gravando todas as entradas, então nenhuma estratégia mudou de regra; a planilha mostra o resultado por "1 / 2 / 3+ no mesmo jogo".
+- **Stake:** estratégia graduada (50+ entradas decididas, ROI > 0, CLV médio > 0) recebe no alerta stake de ¼ de Kelly, de 0,5u a 2u
+  (1u = 1% da banca). As outras seguem 1u no papel. Com o CLV ainda zerado (sem leitura de fechamento), nenhuma gradua por enquanto.
+- **Registro de preços:** `collector/precos.js` grava em `data/precos/<dia>.json` a primeira e a última leitura de cada linha com
+  odd de casa (chance do modelo, odd, casa, hora). Serve para medir o peso da chance implícita da casa (mistura modelo × mercado,
+  ponto de partida 70/30) quando houver amostra; ainda não entra na chance.
+
 ## Pendências conhecidas
 - 99play: lida pela tarefa agendada (precisa do PC ligado com o app Claude aberto). farra.bet: só pelo Tampermonkey, ainda não instalado.
 - EV: sem teto (decisão do usuário em 18/11); só mínimo. O aviso "muito acima do mercado" (EV > 15%) é informativo.

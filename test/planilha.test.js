@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { rowsOf, resumo, filtra, csvOf, planilhaHTML } from '../public/planilha.js';
+import { rowsOf, resumo, filtra, csvOf, planilhaHTML, exposicao } from '../public/planilha.js';
 
 const P = { gen: '2026-11-18T18:00:00Z', estrategias: [{ id: 'm-sv', name: 'Defesas do goleiro' }],
   picks: [
@@ -24,4 +24,10 @@ test('planilha: resumo só conta green/red no lucro e no ROI; filtros e CSV', ()
   const csv = csvOf(P, { per: 'tudo', src: 'tudo' });
   assert.equal(csv.split('\n').length, 4); assert.match(csv, /Menos;4,5;1,8/);
   assert.match(planilhaHTML(P, { per: 'tudo', src: 'tudo', est: '', mk: '', st: '', al: false }), /Por faixa de EV/);
+});
+test('planilha: exposição por jogo agrupa entradas do mesmo jogo no mesmo dia', () => {
+  const a = [{ date: '2026-11-19', gid: 1 }, { date: '2026-11-19', gid: 1 }, { date: '2026-11-19', gid: 2 }, { date: '2026-11-20', gid: 1 },
+    { date: '2026-11-19', gid: 3 }, { date: '2026-11-19', gid: 3 }, { date: '2026-11-19', gid: 3 }, { date: '2026-11-19' }];
+  const f = exposicao(a);
+  assert.deepEqual(a.map(f), ['2 no mesmo jogo', '2 no mesmo jogo', '1 entrada no jogo', '1 entrada no jogo', '3+ no mesmo jogo', '3+ no mesmo jogo', '3+ no mesmo jogo', null]);
 });

@@ -684,7 +684,7 @@ async function estrategiasCmd(rest: string[], chatId?: number): Promise<Out> {
     const mine = picks.filter(x => x.strategy_id === S.id);
     const descr = (await sb(`strategies?id=eq.${S.id}&select=descr`).catch(() => []))?.[0]?.descr ?? '';
     const regs = mine.map((x, i) => x.status === 'aberta' && x.pid ? BTN(`📝${i + 1}`, `be:${estKey(x)}:e.${S.id}`) : null).filter(Boolean) as { text: string; callback_data: string }[];
-    return { text: `<b>🧪 ${esc(S.name)}</b> <i>(${S.status})</i>\n<i>${esc(descr)}</i>\n<blockquote>Conferidas <b>${S.n}</b> · ✅ ${S.g} · ❌ ${S.r} · ➖ ${S.v}\nLucro <b>${u2(+S.lucro || 0)}</b> · ROI <b>${S.roi == null ? '–' : pctS(+S.roi)}</b> · odd média ${S.odd_media ? n2(+S.odd_media) : '–'}\nCLV médio ${S.clv_linha_media == null ? '–' : (S.clv_linha_media >= 0 ? '+' : '') + n1(+S.clv_linha_media)} · EV médio ${evS(S.edge_medio == null ? null : +S.edge_medio)}</blockquote>\n<b>Hoje</b>\n${mine.length ? mine.map((x, i) => pickLn(x, i + 1)).join('\n') : 'Nenhuma entrada hoje.'}\n<i>O placar é teste em papel (1u por entrada, na linha e odd do alerta).${regs.length ? ' 📝 registra a sua entrada real com a odd que você pegou.' : ''}</i>`,
+    return { text: `<b>🧪 ${esc(S.name)}</b> <i>(${S.status})</i>\n<i>${esc(descr)}</i>\n<blockquote>Conferidas <b>${S.n}</b> · ✅ ${S.g} · ❌ ${S.r} · ➖ ${S.v}\nLucro <b>${u2(+S.lucro || 0)}</b> · ROI <b>${S.roi == null ? '–' : pctS(+S.roi)}</b> · odd média ${S.odd_media ? n2(+S.odd_media) : '–'}\nCLV médio ${S.clv_linha_media == null ? '–' : (S.clv_linha_media >= 0 ? '+' : '') + n1(+S.clv_linha_media)} · EV médio ${evS(S.edge_medio == null ? null : +S.edge_medio)}</blockquote>\n${gradTxt(S)}\n<b>Hoje</b>\n${mine.length ? mine.map((x, i) => pickLn(x, i + 1)).join('\n') : 'Nenhuma entrada hoje.'}\n<i>O placar é teste em papel (1u por entrada, na linha e odd do alerta).${regs.length ? ' 📝 registra a sua entrada real com a odd que você pegou.' : ''}</i>`,
       kb: { inline_keyboard: [...chunk(regs, 5), ...kb.inline_keyboard] } };
   }
   const lineOf = (s: any) => `${String(s.name).padEnd(18).slice(0, 18)} ${String(s.n ?? 0).padStart(3)} ${(s.n ? Math.round(s.g / Math.max(1, s.g + s.r) * 100) + '%' : '–').padStart(4)} ${u2(+s.lucro || 0).padStart(7)} ${s.clv_linha_media == null ? '   –' : ((s.clv_linha_media >= 0 ? '+' : '') + n1(+s.clv_linha_media)).padStart(4)}`;
@@ -1198,18 +1198,37 @@ function alertExtra(d: Data, r: Row, x: any) {
   if (u && r.sq?.length) out.push(`🔢 ${sqLine(r.sq, r.l, true)} <i>(🟩 ficou abaixo da linha)</i>`);
   return out.length ? `\n<blockquote>${out.join('\n')}</blockquote>` : '';
 }
+// ---------- stake: ¼ de Kelly com teto de 2u, só para estratégia graduada ----------
+// 1u = 1% da banca. Graduada = 50+ entradas decididas, ROI positivo e CLV médio positivo (a regra do placar).
+// ¼ de Kelly porque a chance do modelo ainda erra: Kelly cheio com chance errada quebra a banca.
+export function kellyU(p: number, o: number, frac = .25, cap = 2) {
+  if (!(p > 0 && p < 1 && o > 1)) return 0;
+  const f = (p * o - 1) / (o - 1); if (f <= 0) return 0;
+  return Math.max(.5, Math.round(Math.min(cap, frac * f * 100) * 4) / 4);
+}
+export const graduada = (S: any) => !!S && (+S.g || 0) + (+S.r || 0) >= 50 && +S.roi > 0 && S.clv_linha_media != null && +S.clv_linha_media > 0;
+function gradTxt(S: any) {
+  if (graduada(S)) return '🎓 <b>Graduada</b>: os alertas trazem stake sugerida de ¼ de Kelly, de 0,5u a 2u (1u = 1% da banca).';
+  const dec = (+S.g || 0) + (+S.r || 0), falta = [dec < 50 ? `${50 - dec} entradas` : '', !(+S.roi > 0) ? 'ROI positivo' : '', !(S.clv_linha_media != null && +S.clv_linha_media > 0) ? 'CLV positivo' : ''].filter(Boolean);
+  return `🧪 <b>Em teste</b> (stake 1u no papel). Para graduar falta: ${falta.join(', ')}.`;
+}
+const uS = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(2).replace(/0$/, '')).replace('.', ',') + 'u';
+
 async function alertas(entries: any[]) {
   const d = await data(), subs: any[] = await sb('bot_subs?select=chat_id&est=eq.true') ?? [], mins = await allMins();
   const names: Record<string, string> = Object.fromEntries(((await estToday(d.date))?.strategies ?? []).map((s: any) => [s.id, s.name]));
   const all = [...d.rows, ...(d.rowsU ?? [])], silent = quiet();
+  const stats: Record<string, any> = Object.fromEntries((await sb('strategy_stats?select=*').catch(() => []) ?? []).map((S: any) => [S.id, S]));
   let sent = 0, fotos = 0;
   for (const x of entries) {
     const r = all.find(R => R.id === x.pid && R.m === x.mk && R.l === +x.line && (R.s ?? 'o') === (x.side ?? 'o'));
     if (!r) continue;
+    const S = stats[x.strategy_id], odd = +(x.open_odd ?? x.odd), sk = graduada(S) ? kellyU(+x.p, odd) : 0;
+    const stake = sk ? `💰 <b>Stake sugerida: ${uS(sk)}</b> <i>(¼ de Kelly, teto 2u · estratégia graduada: ${(+S.g || 0) + (+S.r || 0)} entradas, ROI ${pctS(+S.roi)})</i>\n` : '';
     const td = x.strategy_id === 'tendencia';
     const fire = !td && r.e != null && r.e >= .1 ? ' 🔥' : '';
     const title = td ? `📈 <b>TENDÊNCIA · NOVA ENTRADA</b>` : `🚨 <b>NOVA ENTRADA${fire} · ${esc((names[x.strategy_id] ?? x.strategy_id).toUpperCase())}</b>`;
-    const text = `${title}\n<i>Linha e odd da melhor casa agora · 1u no papel${td ? '' : ' · EV mínimo 5%'}</i>\n${card(d, r, undefined, { td })}${alertExtra(d, r, x)}\n<i>📝 Registre a sua aposta com a odd que você pegou. Quanto antes, melhor: a linha costuma andar até o jogo.</i>\n${FOOT}`;
+    const text = `${title}\n<i>Linha e odd da melhor casa agora · 1u no papel${td ? '' : ' · EV mínimo 5%'}</i>\n${card(d, r, undefined, { td })}${alertExtra(d, r, x)}\n${stake}<i>📝 Registre a sua aposta com a odd que você pegou. Quanto antes, melhor: a linha costuma andar até o jogo.</i>\n${FOOT}`;
     const kb = { inline_keyboard: [[BTN('📝 Registrar minha aposta', `bet:${keyOf(r)}:e.${x.strategy_id}`)], [{ text: '📋 Copiar', copy_text: { text: shareText(r).slice(0, 256) } }, BTN('🧪 Placar', '/estrategias')]] };
     for (const s of subs) {
       if (!okOdd(+(x.open_odd ?? x.odd), mins[String(s.chat_id)] ?? 0)) continue; // odd mínima do chat

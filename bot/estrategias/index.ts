@@ -100,6 +100,18 @@ async function alert(fresh: any[], evMin: number) {
 
 // grava as entradas do dia. A ENTRADA vale na linha e odd do momento do alerta (open_line/open_odd, guardadas pelo
 // gatilho); line/odd seguem atualizadas até o jogo e viram o fechamento (CLV).
+// escolhe, em ordem de score, as entradas que cabem no limite por jogo (contando as já alertadas no dia)
+export function capPerGame(cands: any[], have: any[], perGame: number, score: (x: any) => number) {
+  const used: Record<string, number> = {};
+  for (const h of have) if (h.alerted && h.gid != null) used[h.gid] = (used[h.gid] || 0) + 1;
+  const ok = new Set<any>();
+  for (const x of [...cands].sort((a, b) => score(b) - score(a))) {
+    if (x.gid == null) { ok.add(x); continue; }
+    if ((used[x.gid] || 0) >= perGame) continue;
+    used[x.gid] = (used[x.gid] || 0) + 1; ok.add(x);
+  }
+  return ok;
+}
 async function record(silent = false) {
   // leitor parado/voltou: confere toda rodada, mesmo em dia sem jogo
   const leit = silent ? [] : await leitores().catch(e => ['erro: ' + String(e)]);
@@ -110,7 +122,7 @@ async function record(silent = false) {
   await sb('strategies?on_conflict=id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' },
     body: JSON.stringify(st.strategies.map((s: any) => ({ id: s.id, name: s.name, descr: s.descr, markets: s.markets, updated_at: new Date().toISOString() }))) });
   const now = Date.now();
-  const have: any[] = await sb(`strategy_picks?date=eq.${st.date}&select=strategy_id,pid,mk,alerted`) ?? [];
+  const have: any[] = await sb(`strategy_picks?date=eq.${st.date}&select=strategy_id,pid,mk,alerted,gid`) ?? [];
   const key = (x: any) => `${x.strategy_id}|${x.pid}|${x.mk}`, had = new Set(have.map(key));
   const count: Record<string, number> = {}; for (const h of have) count[h.strategy_id] = (count[h.strategy_id] || 0) + 1;
   const maxOf = Object.fromEntries(st.strategies.map((s: any) => [s.id, s.max ?? 5]));
@@ -131,7 +143,11 @@ async function record(silent = false) {
   const alertedPid = new Set(have.filter(h => h.alerted).map(h => h.pid)), best = new Map<string, any>();
   const score = (x: any) => always.has(x.strategy_id) ? Math.max(x.edge ?? -1, evMin) : (x.edge ?? -1);
   for (const x of fresh) if ((always.has(x.strategy_id) || (x.edge ?? -1) >= evMin) && !alertedPid.has(x.pid) && (!best.has(x.pid) || score(x) > score(best.get(x.pid)))) best.set(x.pid, x);
-  for (const x of fresh) x.alerted = best.get(x.pid) === x;
+  // limite de exposição: no máximo N alertas por jogo no dia (bot_config ALERT_POR_JOGO, padrão 2), ficam os de maior EV.
+  // Entradas do mesmo jogo andam juntas (ritmo, árbitro, placar); o papel continua gravando todas, então nenhuma estratégia muda de regra.
+  const perGame = Math.max(1, Math.round(+((await cfg('ALERT_POR_JOGO')) ?? 2) || 2));
+  const ok = capPerGame([...best.values()], have, perGame, score);
+  for (const x of fresh) x.alerted = ok.has(x);
   const up = (list: any[]) => sb('strategy_picks?on_conflict=date,strategy_id,pid,mk', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(list) });
   if (rows.length) await up(rows);
   if (fresh.length) await up(fresh);

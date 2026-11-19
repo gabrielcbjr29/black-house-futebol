@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { fetchHouses, mergeLines } from './lines.js';
 import { buildBotData } from './botdata.js';
 import { pickStrategies } from './strategies.js';
+import { logPrices } from './precos.js';
 
 const OUT = new URL('../public/data/', import.meta.url);
 export async function finishBot(slate) {
@@ -19,6 +20,7 @@ export async function finishBot(slate) {
   const { hunt, ...rest } = bot;
   writeFileSync(new URL('bot.json', OUT), JSON.stringify(rest));
   writeFileSync(new URL('hunt.json', OUT), JSON.stringify(hunt));
+  try { const n = logPrices(bot, new URL('../data/precos/', import.meta.url)); if (n) console.log(`preços: ${n} leituras novas`); } catch (e) { console.log('preços: ' + e.message); }
   const st = pickStrategies(bot);
   writeFileSync(new URL('strategies.json', OUT), JSON.stringify(st));
   console.log(`bot.json: ${bot.rows.length} linhas (${bot.rows.filter(r => r.d).length} com odd de casa) · estratégias: ${st.picks.length} entradas`);
