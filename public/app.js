@@ -1,5 +1,5 @@
 // Black House Futebol · app (PWA estático no GitHub Pages). Lê public/data/*.json gerados pela coleta.
-import { MARKETS, playerOver, nbOver, ev } from './engine.js';
+import { MARKETS, playerOver, nbOver, ev, calP, calIn } from './engine.js';
 import { PRESETS, DEFAULT, HUNT_MK, preset, run as huntRun } from './hunter.js';
 import { avatarSVG } from './avatar.js';
 import { raioxHTML, RXO, trendsHTML, TRO, refsHTML, ARO } from './raiox.js';
@@ -89,7 +89,7 @@ function detail(r) {
   const k = D.ks?.[r.m] ?? MARKETS[r.m].k;
   let probAt;
   if (r.k === 'p') { const m = D.mdl.p[r.id]; const [s, b] = m.mu[r.m]; probAt = L => playerOver({ start: s, bench: b }, r.m, L, m.ps, m.pb, k); }
-  else probAt = L => nbOver(r.pj, k, L);
+  else probAt = L => calP(r.m, nbOver(r.pj, k, L));
   const lines = r.k === 'p' ? MARKETS[r.m].lines : [r.l - 2, r.l - 1, r.l, r.l + 1, r.l + 2].filter(x => x > 0);
   const others = r.k === 'p' ? D.rows.filter(x => x.id === r.id && x !== r) : [];
   $('#dlgBody').innerHTML = `<h2>${esc(r.n)}</h2><p class="meta">${esc(r.t)} x ${esc(r.o)} · ${hour(r.utc)} · ${esc(MARKETS[r.m].lb)}${r.k === 'p' ? ` · ${STL[r.st]?.[1] ?? ''}` : ''}</p>
@@ -201,6 +201,7 @@ function route() {
 }
 async function main() {
   [D, ST] = await Promise.all([get('bot.json'), get('strategies.json')]);
+  calIn(D?.cal); // calibração v2: curva e k do dia
   if (!D) { $('#list').innerHTML = '<p class="hint">Dados ainda não publicados.</p>'; $('#dataPill').textContent = 'sem dados'; return; }
   $('#dataPill').textContent = (D.demo ? 'DEMONSTRAÇÃO · ' : '') + 'atualizado ' + new Date(D.gen).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
   if (D.demo) $('#dataPill').classList.add('demo');

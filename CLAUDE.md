@@ -70,6 +70,13 @@ A máquina de desenvolvimento pode não alcançar supabase.co/github.io; teste p
 - `node collector/build.js` precisa de `APIFOOTBALL_KEY` (só no CI); `node collector/bot.js` refaz bot.json sem gastar a API
 - Checar o bot localmente: `deno check bot/telegram/index.ts`
 
+## Calibração v2 (desde 19/11/2026)
+`collector/calibrate.js` mede o modelo cru em walk-forward e escolhe, por mercado (jogador, time e jogo), a combinação de menor
+log loss nos últimos 60 dias fora da amostra: {cru, fator global, fator por liga (encolhido para o global)} × {k atual, k sugerido}
+× {sem curva, curva Platt}. Nunca fica pior que o cru. Sai em `public/data/calib.json` (v:2); `applyCalib` liga `cf`, `cfl`, `pl`.
+O bot.json leva `cal` (k e curva por mercado): o bot, o monitor de risco (estrategias) e o site aplicam a mesma curva.
+As regras das estratégias não mudaram; mudou só o modelo (as entradas a partir de 19/11 usam a chance calibrada).
+
 ## Pendências conhecidas
 - 99play: lida pela tarefa agendada (precisa do PC ligado com o app Claude aberto). farra.bet: só pelo Tampermonkey, ainda não instalado.
 - EV: sem teto (decisão do usuário em 18/11); só mínimo. O aviso "muito acima do mercado" (EV > 15%) é informativo.

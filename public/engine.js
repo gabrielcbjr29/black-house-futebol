@@ -29,9 +29,24 @@ export const MARKETS = {
   JSOT: { lb: 'Chutes ao gol no jogo', short: 'no gol jogo', kind: 'j', st: 'sot', k: 15 },
   JFC: { lb: 'Faltas no jogo', short: 'faltas jogo', kind: 'j', st: 'fc', k: 40 },
 };
-/* aplica o k sugerido pela validação (calib.json) nos mercados com amostra grande; devolve o que mudou */
+/* aplica a calibração do walk-forward (calib.json) e devolve o que mudou.
+   v2 (19/11/2026): por mercado, o que venceu fora da amostra: fator da média (global ou por liga), k e curva de chance. */
 export function applyCalib(calib, minN = 2000) {
   const used = [];
+  if (calib?.v === 2) {
+    for (const [mk, x] of Object.entries(calib.mercados ?? {})) {
+      if (!MARKETS[mk] || x.n < 300) continue;
+      const M = MARKETS[mk];
+      if (x.k_sugerido > 0.5) M.k = Math.min(x.k_sugerido, 400);
+      if (x.fator && x.fator !== 1) M.cf = clamp(x.fator, 0.75, 1.25); else delete M.cf;
+      if (x.fator_liga) M.cfl = Object.fromEntries(Object.entries(x.fator_liga).map(([lg, f]) => [lg, clamp(f, 0.75, 1.25)])); else delete M.cfl;
+      if (x.curva && Math.abs(x.curva.b) > 0.3 && Math.abs(x.curva.b) < 3) M.pl = x.curva; else delete M.pl;
+      used.push(`${mk} ${x.escolhido} (k ${M.k})`);
+    }
+    if (MARKETS.SH.cf) MARKETS.SH1.cf = MARKETS.SH.cf; if (MARKETS.SH.cfl) MARKETS.SH1.cfl = MARKETS.SH.cfl;
+    if (MARKETS.SOT.cf) MARKETS.SOT1.cf = MARKETS.SOT.cf; if (MARKETS.SOT.cfl) MARKETS.SOT1.cfl = MARKETS.SOT.cfl;
+    return used;
+  }
   for (const [mk, x] of Object.entries(calib?.mercados ?? {})) {
     if (!MARKETS[mk] || x.n < minN) continue;
     if (x.k_sugerido > 0.5) MARKETS[mk].k = Math.min(x.k_sugerido, 400);
@@ -44,6 +59,16 @@ export function applyCalib(calib, minN = 2000) {
   if (MARKETS.SOT.cf) MARKETS.SOT1.cf = MARKETS.SOT.cf;
   return used;
 }
+/* fator da média do mercado na liga (calibração v2) e curva de chance (Platt) */
+export const facOf = (mk, lg) => MARKETS[mk]?.cfl?.[lg] ?? MARKETS[mk]?.cf ?? 1;
+export function calP(mk, p) {
+  const c = MARKETS[mk]?.pl; if (!c || !(p > 0 && p < 1)) return p;
+  const q = Math.min(Math.max(p, 1e-4), 1 - 1e-4);
+  return 1 / (1 + Math.exp(-(c.a + c.b * Math.log(q / (1 - q)))));
+}
+/* parâmetros que o app e o bot precisam para repetir a conta (bot.json → cal) */
+export const calOut = () => Object.fromEntries(Object.entries(MARKETS).map(([k, v]) => [k, { k: v.k, ...(v.pl ? { pl: v.pl } : {}) }]));
+export function calIn(cal) { for (const [k, v] of Object.entries(cal ?? {})) if (MARKETS[k]) { if (v.k) MARKETS[k].k = v.k; if (v.pl) MARKETS[k].pl = v.pl; else delete MARKETS[k].pl; } }
 export const PLAYER_MK = Object.keys(MARKETS).filter(k => MARKETS[k].kind === 'p');
 export const TEAM_MK = Object.keys(MARKETS).filter(k => MARKETS[k].kind !== 'p');
 
@@ -110,8 +135,8 @@ export function playerContext(mine, theirs, tAvg) {
 /* Média esperada de um mercado do jogador em cada cenário de minutos.
    pp = perfil do jogador: r (taxas por 90), ms (minutos quando titular), mb (minutos quando entra do banco), sr (taxa de defesa do goleiro)
    Devolve { start, bench } = média se for titular / se entrar do banco. */
-export function playerMu(pp, mk, ctx, L = LEAGUE_PRIOR) {
-  const M = MARKETS[mk], cf = M.cf ?? 1, r = playerMuRaw(pp, mk, ctx, L);
+export function playerMu(pp, mk, ctx, L = LEAGUE_PRIOR, lg = null) {
+  const cf = facOf(mk, lg), r = playerMuRaw(pp, mk, ctx, L);
   return { start: r.start * cf, bench: r.bench * cf };
 }
 function playerMuRaw(pp, mk, ctx, L) {
@@ -135,7 +160,7 @@ function playerMuRaw(pp, mk, ctx, L) {
 export function playerOver(mu, mk, line, ps = 1, pb = 0.5, k = MARKETS[mk].k) {
   const pS = clamp(ps, 0, 1), pB = (1 - pS) * clamp(pb, 0, 1), tot = pS + pB;
   if (tot <= 0) return 0;
-  return (pS * nbOver(mu.start, k, line) + pB * (mu.bench > 0 ? nbOver(mu.bench, k, line) : 0)) / tot;
+  return calP(mk, (pS * nbOver(mu.start, k, line) + pB * (mu.bench > 0 ? nbOver(mu.bench, k, line) : 0)) / tot);
 }
 
 /* ---------- valor e nota ---------- */

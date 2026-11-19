@@ -1,5 +1,5 @@
 // Service worker: abre sem internet com a última versão guardada; sempre tenta a rede primeiro.
-const CACHE = 'bh-futebol-v5';
+const CACHE = 'bh-futebol-v6';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'engine.js', 'hunter.js', 'avatar.js', 'raiox.js', 'raiox-lib.js', 'planilha.js', 'icon.svg', 'manifest.webmanifest', 'fonts/archivo.woff2', 'icons/icon-192.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

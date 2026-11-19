@@ -212,15 +212,19 @@ function nbOver(mu: number, k: number, line: number) {
   else { const q = mu / (k + mu); p = Math.pow(k / (k + mu), k); for (let x = 0; x <= thr; x++) { c += p; p *= (x + k) / (x + 1) * q; } }
   return Math.max(0, Math.min(1, 1 - c));
 }
+function calP(cal: any, mk: string, p: number) { // calibração v2: curva de ajuste da chance (Platt)
+  const c = cal?.[mk]?.pl; if (!c || !(p > 0 && p < 1)) return p;
+  const q = Math.min(Math.max(p, 1e-4), 1 - 1e-4); return 1 / (1 + Math.exp(-(c.a + c.b * Math.log(q / (1 - q)))));
+}
 function pNow(bot: any, x: any, L: number) {
   const k = bot.ks?.[x.mk];
   if (x.pid.startsWith('t') || x.pid.startsWith('j')) {
     const r = (bot.rows ?? []).find((r: any) => r.id === x.pid && r.m === x.mk); if (!r) return null;
-    return nbOver(r.pj, k, L); // aproximação: no total do jogo o k da soma fica perto do do mercado
+    return calP(bot.cal, x.mk, nbOver(r.pj, k, L)); // aproximação: no total do jogo o k da soma fica perto do do mercado
   }
   const m = bot.mdl?.p?.[x.pid]; if (!m?.mu?.[x.mk]) return null;
   const [s, b] = m.mu[x.mk], pS = m.ps, pB = (1 - m.ps) * m.pb, tot = pS + pB;
-  return tot > 0 ? (pS * nbOver(s, k, L) + pB * (b > 0 ? nbOver(b, k, L) : 0)) / tot : 0;
+  return tot > 0 ? calP(bot.cal, x.mk, (pS * nbOver(s, k, L) + pB * (b > 0 ? nbOver(b, k, L) : 0)) / tot) : 0;
 }
 async function risco(bot: any) {
   const now = Date.now();

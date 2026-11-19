@@ -43,7 +43,7 @@ type MPlayer = { n: string; t: number; tn: string; on: string; home: boolean; g:
 type Game = { id: number; lg: number; utc: string; st: string; h: string; a: string; hid: number; aid: number; fase: string; ref: string | null };
 type Data = { date: string; gen: string; demo?: boolean; games: Game[]; rows: Row[]; inj: { g: number; n: string; t: string; st: string; why: string }[];
   mdl: { p: Record<string, MPlayer>; t: Record<string, { h: number; a: number; hn: string; an: string; pj: { h: Record<string, number>; a: Record<string, number> }; ref: string | null; rf: number }> };
-  ks: Record<string, number>; houses: { house: string; at: string; n: number }[];
+  ks: Record<string, number>; cal?: Record<string, { k: number; pl?: { a: number; b: number } }>; houses: { house: string; at: string; n: number }[];
   refs?: Record<string, { n: number; f: number; fpg: number; lfpg: number; cpg: number; lg: number } | null>; rowsU?: Row[] };
 type Hunt = { date: string; gen: string; p: Record<string, number[][]> };
 
@@ -297,15 +297,19 @@ function nbOver(mu: number, k: number, line: number) {
   else { const q = mu / (k + mu); p = Math.pow(k / (k + mu), k); for (let x = 0; x <= thr; x++) { c += p; p *= (x + k) / (x + 1) * q; } }
   return Math.max(0, Math.min(1, 1 - c));
 }
+function calP(cal: any, mk: string, p: number) { // calibração v2: curva de ajuste da chance (Platt)
+  const c = cal?.[mk]?.pl; if (!c || !(p > 0 && p < 1)) return p;
+  const q = Math.min(Math.max(p, 1e-4), 1 - 1e-4); return 1 / (1 + Math.exp(-(c.a + c.b * Math.log(q / (1 - q)))));
+}
 // chance de MAIS condicionada a entrar em campo (titular ou entra do banco)
 function pPlayer(d: Data, m: MPlayer, mk: string, L: number) {
   const mu = m.mu[mk]; if (!mu) return null;
   const k = d.ks?.[mk] ?? 6, pS = m.ps, pB = (1 - m.ps) * m.pb, tot = pS + pB;
-  return tot > 0 ? (pS * nbOver(mu[0], k, L) + pB * (mu[1] > 0 ? nbOver(mu[1], k, L) : 0)) / tot : 0;
+  return tot > 0 ? calP(d.cal, mk, (pS * nbOver(mu[0], k, L) + pB * (mu[1] > 0 ? nbOver(mu[1], k, L) : 0)) / tot) : 0;
 }
 function pAt(d: Data, pid: string, mk: string, L: number) {
   const m = d.mdl?.p?.[pid]; if (m) return pPlayer(d, m, mk, L);
-  const r = d.rows.find(x => x.id === pid && x.m === mk); return r ? nbOver(r.pj, d.ks?.[mk] ?? 10, L) : null;
+  const r = d.rows.find(x => x.id === pid && x.m === mk); return r ? calP(d.cal, mk, nbOver(r.pj, d.ks?.[mk] ?? 10, L)) : null;
 }
 const STATW: Record<string, string> = { chutes: 'SH', chute: 'SH', finalizacoes: 'SH', sh: 'SH', nogol: 'SOT', 'no gol': 'SOT', 'ao gol': 'SOT', 'chutes ao gol': 'SOT', sot: 'SOT',
   chutes1t: 'SH1', 'chutes 1t': 'SH1', sh1: 'SH1', nogol1t: 'SOT1', 'no gol 1t': 'SOT1', sot1: 'SOT1', faltas: 'FC', cometidas: 'FC', 'faltas cometidas': 'FC', fc: 'FC',

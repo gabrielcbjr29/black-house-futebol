@@ -2,7 +2,7 @@
 // entre as casas, valor esperado (EV), acertos recentes na mesma linha e Nota BH. rows = MAIS (listas do bot e app);
 // rowsU = MENOS de time e jogo (só com linha de casa; usado pela Tendência e pelos alertas).
 // Sem linha de casa, entra a "linha de referência" do modelo (odd justa), só para comparar.
-import { MARKETS, playerOver, nbOver, sumK, ev, notaBH, grade, refLine, teamLines } from '../public/engine.js';
+import { MARKETS, playerOver, nbOver, sumK, ev, notaBH, grade, refLine, teamLines, facOf, calP, calOut } from '../public/engine.js';
 
 const r3 = x => Math.round(x * 1000) / 1000;
 const STI = { sh: 1, sot: 2, fc: 3 }; // índice na sequência do time: [jogo, chutes, no gol, faltas, chutes adv., no gol adv., faltas adv.]
@@ -86,7 +86,7 @@ export function buildBotData(slate, lines = new Map(), { houses = [] } = {}) {
       const tmk = { sh: 'TSH', sot: 'TSOT', fc: 'TFC' }[st], jmk = { sh: 'JSH', sot: 'JSOT', fc: 'JFC' }[st];
       for (const side of ['h', 'a']) {
         const team = side === 'h' ? g.home : g.away, opp = side === 'h' ? g.away : g.home;
-        const mu = T.pj[side][st], k = MARKETS[tmk].k, probAt = l => nbOver(mu, k, l);
+        const mu = T.pj[side][st] * facOf(tmk, g.lg), k = MARKETS[tmk].k, probAt = l => calP(tmk, nbOver(mu, k, l)); // calibração v2: fator da liga e curva
         const v20 = (T.last?.[side] ?? []).map(x => x[STI[st]]), vals = v20.slice(0, 10);
         const id = `t${team.id}-${gid}`, house = idx.get(`${gid}|${id}|${tmk}`), houseU = idx.get(`${gid}|${id}|${tmk}|u`);
         const ref = house ? null : refLine(probAt, teamLines(mu));
@@ -99,7 +99,7 @@ export function buildBotData(slate, lines = new Map(), { houses = [] } = {}) {
       }
       // total do jogo: soma dos dois times (dispersão da soma, sem passar do teto do mercado)
       const mh = T.pj.h[st], ma = T.pj.a[st], k = Math.min(sumK(mh, MARKETS[tmk].k, ma, MARKETS[tmk].k), MARKETS[jmk].k);
-      const mu = mh + ma, probAt = l => nbOver(mu, k, l);
+      const mu = (mh + ma) * facOf(jmk, g.lg), probAt = l => calP(jmk, nbOver(mu, k, l));
       const id = `j${gid}`, house = idx.get(`${gid}|${id}|${jmk}`), houseU = idx.get(`${gid}|${id}|${jmk}|u`);
       const ref = house ? null : refLine(probAt, teamLines(mu));
       // jogo: total dos últimos jogos de cada time (com os adversários que eles tiveram)
@@ -138,5 +138,6 @@ export function buildBotData(slate, lines = new Map(), { houses = [] } = {}) {
     // Caçador: últimos 20 jogos de cada jogador do dia [min, titular, casa, liga, chutes, no gol, f.com., f.sofr., desarmes, defesas]
     hunt: { date: slate.date, gen: slate.gen, p: Object.fromEntries(Object.entries(slate.model.players).filter(([, P]) => P.hx?.length).map(([pid, P]) => [pid, P.hx.map(h => h.slice(0, 10))])) },
     ks: Object.fromEntries(Object.entries(MARKETS).map(([k, v]) => [k, v.k])),
+    cal: calOut(), // curva de chance por mercado (o app e o bot repetem a conta com ela)
   };
 }

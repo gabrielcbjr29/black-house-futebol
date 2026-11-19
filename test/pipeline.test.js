@@ -41,9 +41,21 @@ test('results.json: jogadores, times e jogo por dia', () => {
   const d = results.stats[results.dates.at(-1)];
   assert.ok(Object.keys(d).some(k => k.startsWith('j')) && Object.keys(d).some(k => k.startsWith('t')));
 });
-test('validação walk-forward: sem viés grande na média (dados simulados)', () => {
-  const r = walkForward(synthHistory({ seed: 9, rounds: 20, nTeams: 10 }), { minTrain: 50 });
-  for (const mk of ['SH', 'FC', 'TK']) assert.ok(Math.abs(r[mk].media_prevista / r[mk].media_real - 1) < 0.08, `${mk} ${r[mk].media_prevista}/${r[mk].media_real}`);
+test('validação walk-forward: sem viés grande na média (dados simulados)', async () => {
+  const { collect } = await import('../collector/calibrate.js');
+  const H = synthHistory({ seed: 9, rounds: 20, nTeams: 10 }), R = collect(H.fixtures, H, 50);
+  const avg = a => a.reduce((s, x) => s + x, 0) / a.length;
+  for (const mk of ['SH', 'FC', 'TK', 'TSH', 'JFC']) { const ratio = avg(R[mk].mu) / avg(R[mk].v); assert.ok(Math.abs(ratio - 1) < 0.08, `${mk} ${ratio}`); }
+});
+test('calibração v2: escolhe no teste fora da amostra e nunca fica pior que o modelo cru', () => {
+  const r = walkForward(synthHistory({ seed: 9, rounds: 40, nTeams: 10 }), { minTrain: 50 });
+  assert.ok(r && Object.keys(r).length >= 3);
+  for (const [mk, c] of Object.entries(r)) {
+    assert.ok(c.logloss_teste.escolhido <= c.logloss_teste.cru + 1e-9, `${mk} piorou`);
+    assert.ok(c.fator > 0.7 && c.fator < 1.3, `${mk} fator ${c.fator}`);
+    if (c.curva) assert.ok(Math.abs(c.curva.b) > 0.3 && Math.abs(c.curva.b) < 3, `${mk} curva ${c.curva.b}`);
+    assert.ok(c.antes.faixas && c.depois.faixas);
+  }
 });
 test('calibração: k escolhido pelo menor erro recupera a dispersão verdadeira', async () => {
   const { bestK } = await import('../collector/calibrate.js');
@@ -52,4 +64,19 @@ test('calibração: k escolhido pelo menor erro recupera a dispersão verdadeira
   for (let i = 0; i < 6000; i++) { const mu = 0.4 + 2 * r(); mus.push(mu); vals.push(nbSample(r, mu, 5)); }
   const k = bestK(mus, vals, [0.5, 1.5, 2.5]);
   assert.ok(k >= 3 && k <= 10, `k=${k}`);
+});
+test('calibração v2 no motor: fator por liga, curva na chance e volta ao normal sem curva', async () => {
+  const E = await import('../public/engine.js');
+  const keep = { ...E.MARKETS.FC };
+  try {
+    E.MARKETS.FC.cf = 0.9; E.MARKETS.FC.cfl = { 71: 1.1 };
+    assert.equal(E.facOf('FC', 71), 1.1); assert.equal(E.facOf('FC', 39), 0.9);
+    const p0 = E.playerOver({ start: 1, bench: 0 }, 'FC', 0.5, 1, 0);
+    E.calIn({ FC: { k: E.MARKETS.FC.k, pl: { a: 0.2, b: 1 } } });
+    const p1 = E.playerOver({ start: 1, bench: 0 }, 'FC', 0.5, 1, 0);
+    assert.ok(p1 > p0 && p1 < 1);
+    assert.ok(Math.abs(E.calP('FC', 0.5) - 1 / (1 + Math.exp(-0.2))) < 1e-9);
+    E.calIn({ FC: { k: E.MARKETS.FC.k } });
+    assert.equal(E.playerOver({ start: 1, bench: 0 }, 'FC', 0.5, 1, 0), p0);
+  } finally { for (const k of Object.keys(E.MARKETS.FC)) delete E.MARKETS.FC[k]; Object.assign(E.MARKETS.FC, keep); }
 });

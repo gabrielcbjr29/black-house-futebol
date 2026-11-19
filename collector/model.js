@@ -56,7 +56,7 @@ export function buildModel(games, H, prof = buildProfiles(H), injuries = {}) {
         for (const k of Object.keys(sh)) pc[k] = ctx[k] * sh[k]; // adversário por posição (quando ligado)
         for (const mk of PLAYER_MK) {
           if ((mk === 'SV') !== (pp.pos === 'G')) continue; // goleiro só no mercado de defesas
-          const m = playerMu(pp, mk, pc, L); mu[mk] = [r3(m.start), r3(m.bench)];
+          const m = playerMu(pp, mk, pc, L, g.lg); mu[mk] = [r3(m.start), r3(m.bench)];
         }
         // jogos dele contra o adversário de hoje (por qualquer time, 45+ min): [data, min, chutes, no gol, f.com., f.sofr., desarmes, defesas]
         const vs = [];
