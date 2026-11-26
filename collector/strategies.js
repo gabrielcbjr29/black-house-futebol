@@ -2,6 +2,7 @@
 // naquele mercado, gravadas em papel (strategy_picks) e medidas por ROI e CLV.
 // Regra de ouro: nunca mudar a regra de uma estratégia que já tem histórico; crie uma versão nova (ex.: m-sot-v2).
 import { MARKETS } from '../public/engine.js';
+import { STRAT_LEAGUES } from '../config/leagues.js';
 
 const MKT = ['SH', 'SOT', 'SH1', 'SOT1', 'FC', 'FS', 'TK', 'SV', 'TSH', 'TSOT', 'TFC', 'JSH', 'JSOT', 'JFC'];
 const edgeOf = r => r.d ? r.p * r.d - 1 : null;
@@ -89,6 +90,9 @@ const toPick = (S, r) => ({ strategy_id: S.id, pid: r.id, name: r.n, team: r.t, 
 
 /* entradas do dia por estratégia (uma por alvo e mercado; ordem: Nota BH, depois valor esperado) */
 export function pickStrategies(bot) {
+  // só as ligas das estratégias (Europa e Conference ficam de fora; ver STRAT_LEAGUES)
+  const inScope = r => r.lg == null || STRAT_LEAGUES.has(+r.lg);
+  bot = { ...bot, rows: (bot.rows ?? []).filter(inScope), rowsU: (bot.rowsU ?? []).filter(inScope) };
   const out = [];
   for (const S of STRATEGIES) {
     const rows = bot.rows.filter(r => { try { return S.test(r); } catch { return false; } })

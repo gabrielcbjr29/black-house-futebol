@@ -8,7 +8,7 @@ separado do da NBA, com segredos próprios).
 jogador: chutes, chutes ao gol, chutes no 1º tempo, chutes ao gol no 1º tempo, faltas cometidas, faltas sofridas,
 desarmes, defesas do goleiro · time: chutes, chutes ao gol e faltas (do time e total do jogo).
 
-**Ligas (v1):** Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Brasileirão e Champions League.
+**Ligas (v1):** Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Brasileirão e Champions League; Europa League e Conference League desde 26/11/2026 (fora das estratégias em papel).
 
 **Casas:** qualquer casa, sem uma principal. Cada casa ganha um leitor no navegador (ver `tools/navegador/`); a coleta
 usa a melhor odd entre as casas lidas. Sem casa, o app mostra a odd justa da linha de referência do modelo.

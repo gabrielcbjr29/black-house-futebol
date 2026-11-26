@@ -109,3 +109,19 @@ test('cada linha guarda a hora da leitura da casa (aviso de odd antiga)', () => 
   assert.equal(lines.get('7|20|SH|0.5')[0].at, '2026-11-14T03:43:47Z');
   assert.equal(lines.get('7|20|SH|0.5')[0].house, 'Farra');
 });
+test('estratégias: Europa e Conference League ficam fora do papel (as regras das estratégias com histórico não mudam)', () => {
+  const base = { n: 'A', t: 'T', o: 'O', g: 9, k: 'p', st: 'xi', ps: 1, m: 'SH', nt: 80, utc: '2026-11-14T21:30:00Z', fase: 'escalacao', l: 1.5, p: 0.62, d: 1.7, b: 'x' };
+  const rows = [{ ...base, id: '1', lg: 39 }, { ...base, id: '2', lg: 3 }, { ...base, id: '3', lg: 848 }, { ...base, id: '4', lg: 2 }];
+  assert.deepEqual(pickStrategies({ date: 'd', gen: 'g', rows }).picks.filter(x => x.strategy_id === 'm-sh').map(x => x.pid), ['1', '4']);
+});
+import { teamProfiles } from '../collector/profiles.js';
+import { CUP_IDS, LEAGUE_IDS } from '../config/leagues.js';
+test('ligas: Europa (3) e Conference (848) entram na coleta como copa, sem virar a liga do time', () => {
+  assert.ok(LEAGUE_IDS.has(3) && LEAGUE_IDS.has(848) && CUP_IDS.has(2) && CUP_IDS.has(3) && CUP_IDS.has(848) && !CUP_IDS.has(39));
+  const t = [10, 4, 12, 50]; // chutes, no gol, faltas, posse (só para ter as estatísticas)
+  const fx = (id, lg, h, a) => ({ id, lg, s: 2026, d: `2026-10-${String(id).padStart(2, '0')}`, h, a, p: [], t: { [h]: t, [a]: t } });
+  const F = [fx(1, 39, 10, 11), fx(2, 3, 10, 12), fx(3, 848, 10, 13), fx(4, 3, 10, 14)];
+  const tp = teamProfiles(F, {});
+  assert.equal(tp[10].lg, 39);   // 3 jogos de copa e 1 de liga: a liga do time segue a Premier League
+  assert.equal(tp[12].lg, null); // só jogou copa: sem liga nacional
+});

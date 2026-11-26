@@ -10,7 +10,7 @@ import { avatarSVG } from './avatar.mjs';
 const ROOT = process.argv[2] ? resolve(process.argv[2]) : join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const MK = { SH: 'Chutes', SOT: 'Chutes ao gol', SH1: 'Chutes 1º tempo', SOT1: 'Chutes ao gol 1º tempo', FC: 'Faltas cometidas', FS: 'Faltas sofridas', TK: 'Desarmes', SV: 'Defesas',
   TSH: 'Chutes do time', TSOT: 'Chutes ao gol do time', TFC: 'Faltas do time', JSH: 'Chutes no jogo', JSOT: 'Chutes ao gol no jogo', JFC: 'Faltas no jogo' };
-const LG = { 39: 'Premier League', 140: 'La Liga', 135: 'Serie A', 78: 'Bundesliga', 61: 'Ligue 1', 71: 'Brasileirão', 2: 'Champions' };
+const LG = { 39: 'Premier League', 140: 'La Liga', 135: 'Serie A', 78: 'Bundesliga', 61: 'Ligue 1', 71: 'Brasileirão', 2: 'Champions', 3: 'Europa League', 848: 'Conference' };
 const STALE = 2 * 3600e3, ODD_MIN = 1.4, ODD_MAX = 3.5;
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const n1 = x => (Math.round(x * 10) / 10).toLocaleString('pt-BR', { minimumFractionDigits: Number.isInteger(Math.round(x * 10) / 10) ? 0 : 1 });

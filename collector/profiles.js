@@ -2,8 +2,8 @@
 // taxas por 90 de cada jogador, chance de ser titular, minutos e fator do árbitro.
 import { P, T } from './history.js';
 import { LEAGUE_PRIOR, POS_PRIOR } from '../public/engine.js';
+import { CUP_IDS } from '../config/leagues.js';
 
-const UCL = 2;
 const decay = (i, half) => Math.pow(0.5, i / half);
 const r3 = x => Math.round(x * 1000) / 1000;
 
@@ -34,7 +34,7 @@ export function leagueParams(fixtures) {
 }
 export const lgOf = (LP, id) => LP[id] ?? LEAGUE_PRIOR;
 
-/* times: razões em relação à média da liga de cada jogo (assim a Champions entra na mesma escala), com peso maior
+/* times: razões em relação à média da liga de cada jogo (assim as copas europeias entram na mesma escala), com peso maior
    nos jogos recentes e encolhimento para 1 (média) quando há poucos jogos */
 export function teamProfiles(fixtures, LP, { half = 12, K = 5, maxN = 38 } = {}) {
   const byTeam = {};
@@ -50,7 +50,7 @@ export function teamProfiles(fixtures, LP, { half = 12, K = 5, maxN = 38 } = {})
       const L = lgOf(LP, f.lg), w = decay(i, half), a = f.t[me], b = f.t[op];
       s.w += w; s.shF += w * a[T.sh] / (L.sh / 2); s.shA += w * b[T.sh] / (L.sh / 2); s.sotF += w * a[T.sot] / (L.sot / 2); s.sotA += w * b[T.sot] / (L.sot / 2);
       s.fcF += w * a[T.fc] / (L.fc / 2); s.fcA += w * b[T.fc] / (L.fc / 2); s.poss += w * (a[T.poss] || 50);
-      if (f.lg !== UCL) lgCount[f.lg] = (lgCount[f.lg] || 0) + 1;
+      if (!CUP_IDS.has(f.lg)) lgCount[f.lg] = (lgCount[f.lg] || 0) + 1;
     });
     const sh = x => r3((x + K) / (s.w + K));
     const dom = +Object.entries(lgCount).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
@@ -221,7 +221,7 @@ const DEF_P = ['sh', 'sot', 'fc', 'fs', 'tk', 'sv'];
 export function defenseRanks(fixtures, { win = 12 } = {}) {
   const byTeam = {}, curS = {};
   for (let i = fixtures.length - 1; i >= 0; i--) {
-    const f = fixtures[i]; if (f.lg === UCL || !f.t?.[f.h] || !f.t?.[f.a]) continue;
+    const f = fixtures[i]; if (CUP_IDS.has(f.lg) || !f.t?.[f.h] || !f.t?.[f.a]) continue;
     curS[f.lg] = Math.max(curS[f.lg] ?? 0, f.s);
     for (const [me, op] of [[f.h, f.a], [f.a, f.h]]) (byTeam[me] ??= []).push({ f, me, op });
   }

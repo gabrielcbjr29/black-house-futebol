@@ -58,10 +58,10 @@ até 18 horas.
 | farra.bet | `leitor-farra.user.js` | própria (páginas prontas no servidor, botões com `data-mercado`/`data-rotulo`/`data-odd`) | Chutes do jogador, Faltas cometidas, Desarmes, Defesas do goleiro ("N ou mais" = mais de N−0,5) | Finalizações casa/fora, Chutes a gol casa/fora, Total de finalizações, Total de chutes a gol |
 
 - **99play:** odd `typeId` 12 = MAIS, 13 = MENOS; `oddStatus` 0 = aberta. Ligas (`champIds`): Premier 2936, La Liga 2941,
-  Serie A 2942, Bundesliga 2950, Ligue 1 2943, Brasileirão 11318, Champions 16808. Cada jogador vem com a escada
+  Serie A 2942, Bundesliga 2950, Ligue 1 2943, Brasileirão 11318, Champions 16808, Europa League 16809, Conference League 31608. Cada jogador vem com a escada
   0,5 / 1,5 / 2,5. Sem faltas, desarmes nem 1º tempo de jogador (pelo menos no Brasileirão).
 - **farra:** ligas por código (`soccer_brazil_campeonato`, `soccer_epl`, `soccer_spain_la_liga`, `soccer_italy_serie_a`,
-  `soccer_germany_bundesliga`, `soccer_france_ligue_one`, `soccer_uefa_champs_league`/`soccer_ls_32644`). Horário na lista
+  `soccer_germany_bundesliga`, `soccer_france_ligue_one`, `soccer_uefa_champs_league`/`soccer_ls_32644`, Europa League `soccer_ls_30444`, Conference League `soccer_ls_45863`). Horário na lista
   como "Hoje 18:30" / "21/11 09:30" (Brasília). Chutes do jogador começam em 2+ (mais de 1,5). Sem chutes ao gol de jogador,
   faltas sofridas, faltas de time nem 1º tempo.
 - **Ninguém abre:** faltas sofridas, chutes de jogador no 1º tempo, faltas do time/jogo. Esses mercados seguem só com a

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Black House Futebol · leitor 99play
 // @namespace    blackhouse-futebol
-// @version      1.1
+// @version      1.2
 // @description  Com uma aba da 99play aberta no seu navegador, lê de 30 em 30 min as linhas de chutes, chutes ao gol e defesas (jogador, time e jogo) das ligas do projeto e manda para o Black House Futebol.
 // @match        https://99play.io/*
 // @grant        none
@@ -15,7 +15,7 @@
   const HOUSE = '99play', KEY = 'bh_fut_99_ultimo', LOCK = 'bh_fut_99_lock';
   const BASE = 'https://sb2frontend-altenar2.biahosted.com/api/widget/';
   // ligas do projeto (champIds da Altenar)
-  const CHAMPS = { 2936: 'Premier League', 2941: 'La Liga', 2942: 'Serie A', 2950: 'Bundesliga', 2943: 'Ligue 1', 11318: 'Brasileirão', 16808: 'Champions League' };
+  const CHAMPS = { 2936: 'Premier League', 2941: 'La Liga', 2942: 'Serie A', 2950: 'Bundesliga', 2943: 'Ligue 1', 11318: 'Brasileirão', 16808: 'Champions League', 16809: 'Europa League', 31608: 'Conference League' };
   // mercados de jogador (childMarkets, só MAIS) e de time/jogo (markets, MAIS e MENOS). Odd typeId 12 = MAIS, 13 = MENOS; oddStatus 0 = aberta
   const PLAYER = { 15735: 'SH', 15734: 'SOT', 17938: 'SV' };
   const TEAM = { 15728: ['TSH', 0], 15729: ['TSH', 1], 15726: ['TSOT', 0], 15727: ['TSOT', 1] };

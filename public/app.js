@@ -6,7 +6,7 @@ import { raioxHTML, RXO, trendsHTML, TRO, refsHTML, ARO } from './raiox.js';
 import { planilhaHTML, PO, csvOf } from './planilha.js';
 
 const FN = 'https://mccxlgtiulpknubdiyrz.supabase.co/functions/v1/';
-const LG = { 39: ['🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Premier League'], 140: ['🇪🇸', 'La Liga'], 135: ['🇮🇹', 'Serie A'], 78: ['🇩🇪', 'Bundesliga'], 61: ['🇫🇷', 'Ligue 1'], 71: ['🇧🇷', 'Brasileirão'], 2: ['🏆', 'Champions'] };
+const LG = { 39: ['🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Premier League'], 140: ['🇪🇸', 'La Liga'], 135: ['🇮🇹', 'Serie A'], 78: ['🇩🇪', 'Bundesliga'], 61: ['🇫🇷', 'Ligue 1'], 71: ['🇧🇷', 'Brasileirão'], 2: ['🏆', 'Champions'], 3: ['🟠', 'Europa League'], 848: ['🟢', 'Conference'] };
 const STL = { xi: ['xi', 'titular'], banco: ['banco', 'banco'], provavel: ['', 'provável'], duvida: ['duvida', 'dúvida'] };
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

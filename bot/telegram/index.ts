@@ -89,7 +89,7 @@ const MKN: Record<string, string> = { SH: 'Chutes', SOT: 'Chutes ao gol', SH1: '
   TSH: 'Chutes do time', TSOT: 'Chutes ao gol do time', TFC: 'Faltas do time', JSH: 'Chutes no jogo', JSOT: 'Chutes ao gol no jogo', JFC: 'Faltas no jogo' };
 const MSTAT: Record<string, string> = { SH: 'sh', SOT: 'sot', SH1: 'sh', SOT1: 'sot', FC: 'fc', FS: 'fs', TK: 'tk', SV: 'sv' };
 const LINES: Record<string, number[]> = { SH: [0.5, 1.5, 2.5, 3.5], SOT: [0.5, 1.5, 2.5], SH1: [0.5, 1.5], SOT1: [0.5, 1.5], FC: [0.5, 1.5, 2.5], FS: [0.5, 1.5, 2.5], TK: [0.5, 1.5, 2.5, 3.5], SV: [1.5, 2.5, 3.5, 4.5] };
-const LG: Record<number, [string, string]> = { 39: ['🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Premier League'], 140: ['🇪🇸', 'La Liga'], 135: ['🇮🇹', 'Serie A'], 78: ['🇩🇪', 'Bundesliga'], 61: ['🇫🇷', 'Ligue 1'], 71: ['🇧🇷', 'Brasileirão'], 2: ['🏆', 'Champions'] };
+const LG: Record<number, [string, string]> = { 39: ['🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Premier League'], 140: ['🇪🇸', 'La Liga'], 135: ['🇮🇹', 'Serie A'], 78: ['🇩🇪', 'Bundesliga'], 61: ['🇫🇷', 'Ligue 1'], 71: ['🇧🇷', 'Brasileirão'], 2: ['🏆', 'Champions'], 3: ['🟠', 'Europa League'], 848: ['🟢', 'Conference'] };
 // comando → mercados
 const GROUPS: Record<string, { mk: string[]; title: string; ic: string }> = {
   chutes: { mk: ['SH'], title: 'Chutes', ic: '🎯' }, nogol: { mk: ['SOT'], title: 'Chutes ao gol', ic: '🥅' },

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Black House Futebol · leitor farra.bet
 // @namespace    blackhouse-futebol
-// @version      1.1
+// @version      1.2
 // @description  Com uma aba da farra.bet aberta no seu navegador, lê de 30 em 30 min as linhas de chutes, faltas cometidas, desarmes e defesas (jogador) e de chutes/chutes ao gol (time e jogo) das ligas do projeto e manda para o Black House Futebol.
 // @match        https://farra.bet/*
 // @grant        none
@@ -16,8 +16,9 @@
   // páginas de liga (código da farra → nome). A Champions aparece com dois códigos; o nome da liga no topo da página
   // do jogo confirma (outras ligas com nome parecido, como "Ligue 1" do Senegal, ficam de fora)
   const LIGAS = { soccer_brazil_campeonato: 'Brasileirão', soccer_epl: 'Premier League', soccer_spain_la_liga: 'La Liga', soccer_italy_serie_a: 'Serie A',
-    soccer_germany_bundesliga: 'Bundesliga', soccer_france_ligue_one: 'Ligue 1', soccer_uefa_champs_league: 'Champions League', soccer_ls_32644: 'Champions League' };
-  const CONFERE = { 'Champions League': /UEFA Champions League$/i };
+    soccer_germany_bundesliga: 'Bundesliga', soccer_france_ligue_one: 'Ligue 1', soccer_uefa_champs_league: 'Champions League', soccer_ls_32644: 'Champions League',
+    soccer_ls_30444: 'Europa League', soccer_ls_45863: 'Conference League' };
+  const CONFERE = { 'Champions League': /UEFA Champions League$/i, 'Europa League': /UEFA Europa League$/i, 'Conference League': /UEFA Conference League$/i };
   // mercados de jogador: "Nome — N ou mais …" vira MAIS de N−0,5
   const PLAYER = { 'Chutes do jogador': 'SH', 'Faltas cometidas pelo jogador (ou mais)': 'FC', 'Desarmes do jogador (N ou mais)': 'TK', 'Defesas do goleiro (N ou mais)': 'SV' };
   // time e jogo: "Mais de 16,5" e "Menos de 16,5"

@@ -7,7 +7,7 @@
 await (async (TOKEN) => {
   const POST = 'https://mccxlgtiulpknubdiyrz.supabase.co/functions/v1/linhas?token=';
   const BASE = 'https://sb2frontend-altenar2.biahosted.com/api/widget/';
-  const CHAMPS = { 2936: 'Premier League', 2941: 'La Liga', 2942: 'Serie A', 2950: 'Bundesliga', 2943: 'Ligue 1', 11318: 'Brasileirão', 16808: 'Champions League' };
+  const CHAMPS = { 2936: 'Premier League', 2941: 'La Liga', 2942: 'Serie A', 2950: 'Bundesliga', 2943: 'Ligue 1', 11318: 'Brasileirão', 16808: 'Champions League', 16809: 'Europa League', 31608: 'Conference League' };
   const PLAYER = { 15735: 'SH', 15734: 'SOT', 17938: 'SV' };
   const TEAM = { 15728: ['TSH', 0], 15729: ['TSH', 1], 15726: ['TSOT', 0], 15727: ['TSOT', 1] };
   const MATCH = { 15738: 'JSH', 15737: 'JSOT' };

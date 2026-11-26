@@ -7,7 +7,9 @@ fuso America/Sao_Paulo (o "dia" do projeto segue Brasília).
 Props de futebol com modelo próprio (Modelo BH), copiando a arquitetura do Black House da NBA (fábrica de estratégias).
 - Jogador: chutes, chutes ao gol, chutes 1º tempo, no gol 1º tempo, faltas cometidas, faltas sofridas, desarmes, defesas.
 - Time e jogo: chutes, chutes ao gol, faltas (MAIS; MENOS só com linha de casa, em `rowsU`).
-- Ligas: PL, La Liga, Serie A, Bundesliga, Ligue 1, Brasileirão, Champions (`config/leagues.js`).
+- Ligas: PL, La Liga, Serie A, Bundesliga, Ligue 1, Brasileirão, Champions, Europa League e Conference League (`config/leagues.js`).
+  As três copas (`cup: true`, `CUP_IDS`) não definem a liga do time nem o ranking de defesa. As estratégias em papel só
+  usam as 7 ligas originais (`STRAT_LEAGUES`); Europa e Conference entram no app, bot e Raio-X, e nas estratégias só com versão nova.
 - Fábrica de estratégias: papel → ROI/CLV → stake. Só sai do papel com 50+ entradas, ROI+ e CLV+; revisão com 150–200.
 - Valuestats (valuestats.com) é a **referência de funcionalidades** do usuário. Os termos dele proíbem copiar e
   redistribuir o conteúdo e o robots.txt bloqueia /api/, então **não raspe nem use dados do Valuestats**: as ideias
