@@ -60,7 +60,11 @@ até 18 horas.
 
 - **99play:** odd `typeId` 12 = MAIS, 13 = MENOS; `oddStatus` 0 = aberta. Ligas (`champIds`): Premier 2936, La Liga 2941,
   Serie A 2942, Bundesliga 2950, Ligue 1 2943, Brasileirão 11318, Champions 16808, Europa League 16809, Conference League 31608. Cada jogador vem com a escada
-  0,5 / 1,5 / 2,5. Sem faltas, desarmes nem 1º tempo de jogador (pelo menos no Brasileirão).
+  0,5 / 1,5 / 2,5. **Desde 28/11** também: 1º tempo chutes (5025 → SH1) e chutes a gol (5026 → SOT1) de jogador,
+  faltas cometidas do jogador (31453 → FC), faltas do time (15732 casa / 15733 fora → TFC) e do jogo (15740 → JFC),
+  mais e menos. Esses só existem nas 5 ligas europeias (não no Brasileirão nem nas copas). A 99play NÃO abre desarmes de
+  jogador nem faltas sofridas: só desarmes do time (25166/25167) e do jogo (25164), que o modelo não tem. Não usamos as
+  variantes "e substituto" (31451/31452), "fora da área" (31708/31712) e "com o pé" (31709): a regra é outra.
 - **farra:** ligas por código (`soccer_brazil_campeonato`, `soccer_epl`, `soccer_spain_la_liga`, `soccer_italy_serie_a`,
   `soccer_germany_bundesliga`, `soccer_france_ligue_one`, `soccer_uefa_champs_league`/`soccer_ls_32644`, Europa League `soccer_ls_30444`, Conference League `soccer_ls_45863`). Horário na lista
   como "Hoje 18:30" / "21/11 09:30" (Brasília). Chutes do jogador começam em 2+ (mais de 1,5). Sem chutes ao gol de jogador,

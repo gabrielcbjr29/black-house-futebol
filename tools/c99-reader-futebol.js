@@ -8,9 +8,9 @@ await (async (TOKEN) => {
   const POST = 'https://mccxlgtiulpknubdiyrz.supabase.co/functions/v1/linhas?token=';
   const BASE = 'https://sb2frontend-altenar2.biahosted.com/api/widget/';
   const CHAMPS = { 2936: 'Premier League', 2941: 'La Liga', 2942: 'Serie A', 2950: 'Bundesliga', 2943: 'Ligue 1', 11318: 'Brasileirão', 16808: 'Champions League', 16809: 'Europa League', 31608: 'Conference League' };
-  const PLAYER = { 15735: 'SH', 15734: 'SOT', 17938: 'SV' };
-  const TEAM = { 15728: ['TSH', 0], 15729: ['TSH', 1], 15726: ['TSOT', 0], 15727: ['TSOT', 1] };
-  const MATCH = { 15738: 'JSH', 15737: 'JSOT' };
+  const PLAYER = { 15735: 'SH', 15734: 'SOT', 17938: 'SV', 5025: 'SH1', 5026: 'SOT1', 31453: 'FC' };
+  const TEAM = { 15728: ['TSH', 0], 15729: ['TSH', 1], 15726: ['TSOT', 0], 15727: ['TSOT', 1], 15732: ['TFC', 0], 15733: ['TFC', 1] };
+  const MATCH = { 15738: 'JSH', 15737: 'JSOT', 15740: 'JFC' };
   const qs = x => new URLSearchParams({ culture: 'pt-BR', timezoneOffset: '180', integration: '24games1', deviceType: '1', numFormat: 'en-GB', countryCode: 'BR', ...x });
   const get = async p => { const r = await fetch(BASE + p); if (!r.ok) throw new Error(p.split('?')[0] + ' ' + r.status); return r.json(); };
   const lineOf = o => +(String(o.name).match(/(\d+(?:[.,]\d+)?)/)?.[1] ?? '').replace(',', '.');

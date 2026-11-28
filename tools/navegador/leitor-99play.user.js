@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Black House Futebol · leitor 99play
 // @namespace    blackhouse-futebol
-// @version      1.2
+// @version      1.3
 // @description  Com uma aba da 99play aberta no seu navegador, lê de 30 em 30 min as linhas de chutes, chutes ao gol e defesas (jogador, time e jogo) das ligas do projeto e manda para o Black House Futebol.
 // @match        https://99play.io/*
 // @grant        none
@@ -17,9 +17,9 @@
   // ligas do projeto (champIds da Altenar)
   const CHAMPS = { 2936: 'Premier League', 2941: 'La Liga', 2942: 'Serie A', 2950: 'Bundesliga', 2943: 'Ligue 1', 11318: 'Brasileirão', 16808: 'Champions League', 16809: 'Europa League', 31608: 'Conference League' };
   // mercados de jogador (childMarkets, só MAIS) e de time/jogo (markets, MAIS e MENOS). Odd typeId 12 = MAIS, 13 = MENOS; oddStatus 0 = aberta
-  const PLAYER = { 15735: 'SH', 15734: 'SOT', 17938: 'SV' };
-  const TEAM = { 15728: ['TSH', 0], 15729: ['TSH', 1], 15726: ['TSOT', 0], 15727: ['TSOT', 1] };
-  const MATCH = { 15738: 'JSH', 15737: 'JSOT' };
+  const PLAYER = { 15735: 'SH', 15734: 'SOT', 17938: 'SV', 5025: 'SH1', 5026: 'SOT1', 31453: 'FC' };
+  const TEAM = { 15728: ['TSH', 0], 15729: ['TSH', 1], 15726: ['TSOT', 0], 15727: ['TSOT', 1], 15732: ['TFC', 0], 15733: ['TFC', 1] };
+  const MATCH = { 15738: 'JSH', 15737: 'JSOT', 15740: 'JFC' };
   const qs = x => new URLSearchParams({ culture: 'pt-BR', timezoneOffset: '180', integration: '24games1', deviceType: '1', numFormat: 'en-GB', countryCode: 'BR', ...x });
   const get = async p => { const r = await fetch(BASE + p); if (!r.ok) throw new Error(p.split('?')[0] + ' ' + r.status); return r.json(); };
   const hhmm = t => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });

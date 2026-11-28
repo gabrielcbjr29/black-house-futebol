@@ -17,9 +17,9 @@
   const HOUSE = 'finta', KEY = 'bh_fut_finta_ultimo', LOCK = 'bh_fut_finta_lock', CFG = 'bh_fut_finta_altenar';
   // ligas do projeto (champIds da Altenar, iguais em todos os sites da plataforma)
   const CHAMPS = { 2936: 'Premier League', 2941: 'La Liga', 2942: 'Serie A', 2950: 'Bundesliga', 2943: 'Ligue 1', 11318: 'Brasileirão', 16808: 'Champions League', 16809: 'Europa League', 31608: 'Conference League' };
-  const PLAYER = { 15735: 'SH', 15734: 'SOT', 17938: 'SV' };
-  const TEAM = { 15728: ['TSH', 0], 15729: ['TSH', 1], 15726: ['TSOT', 0], 15727: ['TSOT', 1] };
-  const MATCH = { 15738: 'JSH', 15737: 'JSOT' };
+  const PLAYER = { 15735: 'SH', 15734: 'SOT', 17938: 'SV', 5025: 'SH1', 5026: 'SOT1', 31453: 'FC' };
+  const TEAM = { 15728: ['TSH', 0], 15729: ['TSH', 1], 15726: ['TSOT', 0], 15727: ['TSOT', 1], 15732: ['TFC', 0], 15733: ['TFC', 1] };
+  const MATCH = { 15738: 'JSH', 15737: 'JSOT', 15740: 'JFC' };
   const hhmm = t => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const lineOf = o => +(String(o.name).match(/(\d+(?:[.,]\d+)?)/)?.[1] ?? '').replace(',', '.');
