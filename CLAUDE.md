@@ -91,7 +91,7 @@ As regras das estratégias não mudaram; mudou só o modelo (as entradas a parti
 ## Pendências conhecidas
 - 99play: desde 28/11 lida pelo leitor 99play do projeto da NBA (Tampermonkey `leitor99.user.js` 1.4, no Chrome do usuário, de 30 em 30 min),
   que manda para `linhas` com o token da NBA (conferido em `c99-ingest/leitor99.user.js`, sem guardar o token aqui). A tarefa agendada
-  (navegador do app Claude) fica de reserva. farra.bet: só pelo Tampermonkey, ainda não instalado. finta.win: lida pelo `finta.user.js` 1.1 do projeto da NBA (JSON público da página, no navegador do usuário, de 30 em 30 min;
+  (navegador do app Claude) fica de reserva. farra.bet: só pelo Tampermonkey, ainda não instalado. finta.win: lida pelo `finta.user.js` 1.2 do projeto da NBA (envio pelo GM_xmlhttpRequest: o CSP da Finta bloqueia fetch para fora) (JSON público da página, no navegador do usuário, de 30 em 30 min;
   6 ligas + copas da UEFA; jogador só MAIS, inclusive desarmes).
 - EV: sem teto (decisão do usuário em 18/11); só mínimo. O aviso "muito acima do mercado" (EV > 15%) é informativo.
 - Escanteios, cartões e gols aparecem só como informação (Raio-X); modelo e estratégias continuam nos mercados de sempre.
