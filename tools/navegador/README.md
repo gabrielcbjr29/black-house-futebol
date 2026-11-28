@@ -55,7 +55,7 @@ até 18 horas.
 | Casa | Leitor | Plataforma | Mercados de jogador | Time e jogo |
 |---|---|---|---|---|
 | 99play | `leitor-99play.user.js` | Altenar (widget `sb2frontend-altenar2.biahosted.com`, `integration=24games1`) | Chutes (15735), Chutes a Gol (15734), Defesas do Goleiro (17938) | Chutes do time (15728 casa / 15729 fora), Chutes a Gol do time (15726 / 15727), Totais chutes (15738), Totais chutes a gol (15737) |
-| finta.win | `leitor-finta.user.js` (v0.1, 28/11) | a confirmar: o leitor descobre sozinho. Se for Altenar, pega o `integration` do próprio site e lê como a 99play; se não, mostra o botão "copiar diagnóstico" (só domínios e caminhos) para fazer o leitor certo | como a 99play, se for Altenar | como a 99play, se for Altenar |
+| finta.win | `finta.user.js` do projeto da NBA (1.1, 28/11) | JSON público da própria página (lobby e jogo), de 30 em 30 min | chutes, no gol, faltas, desarmes, defesas (só MAIS) | chutes, no gol e faltas do time e do jogo |
 | farra.bet | `leitor-farra.user.js` | própria (páginas prontas no servidor, botões com `data-mercado`/`data-rotulo`/`data-odd`) | Chutes do jogador, Faltas cometidas, Desarmes, Defesas do goleiro ("N ou mais" = mais de N−0,5) | Finalizações casa/fora, Chutes a gol casa/fora, Total de finalizações, Total de chutes a gol |
 
 - **99play:** odd `typeId` 12 = MAIS, 13 = MENOS; `oddStatus` 0 = aberta. Ligas (`champIds`): Premier 2936, La Liga 2941,
