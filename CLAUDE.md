@@ -89,7 +89,9 @@ As regras das estratégias não mudaram; mudou só o modelo (as entradas a parti
   ponto de partida 70/30) quando houver amostra; ainda não entra na chance.
 
 ## Pendências conhecidas
-- 99play: lida pela tarefa agendada (precisa do PC ligado com o app Claude aberto). farra.bet: só pelo Tampermonkey, ainda não instalado.
+- 99play: desde 28/11 lida pelo leitor 99play do projeto da NBA (Tampermonkey `leitor99.user.js` 1.4, no Chrome do usuário, de 30 em 30 min),
+  que manda para `linhas` com o token da NBA (conferido em `c99-ingest/leitor99.user.js`, sem guardar o token aqui). A tarefa agendada
+  (navegador do app Claude) fica de reserva. farra.bet: só pelo Tampermonkey, ainda não instalado. finta.win: plataforma própria (bolsa), leitor por fazer.
 - EV: sem teto (decisão do usuário em 18/11); só mínimo. O aviso "muito acima do mercado" (EV > 15%) é informativo.
 - Escanteios, cartões e gols aparecem só como informação (Raio-X); modelo e estratégias continuam nos mercados de sempre.
 - Doc de estado no projeto do claude.ai: `claude/black-house-futebol-estado.md`.

@@ -11,6 +11,17 @@ async function sb(path: string, init: RequestInit = {}) {
   if (!r.ok) throw new Error('banco ' + r.status + ' ' + (await r.text()).slice(0, 160));
   const t = await r.text(); return t ? JSON.parse(t) : null;
 }
+// O leitor 99play do projeto da NBA (Tampermonkey no PC do usuário) também lê o futebol desde 28/11 e manda com o token dele.
+// Este projeto não guarda esse token: confere com a própria função da NBA, que só entrega o script com o token certo.
+const NBA_OK = new Set<string>();
+async function tokenNBA(t: string) {
+  if (NBA_OK.has(t)) return true;
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(t)) return false;
+  const r = await fetch('https://brtexfomhlvltdsuezsi.supabase.co/functions/v1/c99-ingest/leitor99.user.js?token=' + encodeURIComponent(t)).catch(() => null);
+  if (r) await r.body?.cancel();
+  if (r?.status === 200) { NBA_OK.add(t); return true; }
+  return false;
+}
 const MK = new Set(['SH', 'SOT', 'SH1', 'SOT1', 'FC', 'FS', 'TK', 'SV', 'TSH', 'TSOT', 'TFC', 'JSH', 'JSOT', 'JFC']);
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
@@ -21,8 +32,8 @@ Deno.serve(async (req: Request) => {
       const rows = await sb('rpc/latest_lines', { method: 'POST', body: '{}' }) ?? [];
       return json({ houses: rows.map((r: any) => ({ house: r.house, taken_at: r.taken_at, payload: r.payload })) });
     }
-    const tok = (await sb('bot_config?key=eq.LINHAS_TOKEN&select=value'))?.[0]?.value;
-    if (!tok || url.searchParams.get('token') !== tok) return json({ ok: false, erro: 'token' }, 403);
+    const tok = (await sb('bot_config?key=eq.LINHAS_TOKEN&select=value'))?.[0]?.value, got = url.searchParams.get('token') ?? '';
+    if (!got || (got !== tok && !(await tokenNBA(got)))) return json({ ok: false, erro: 'token' }, 403);
     const raw = await req.text();
     if (raw.length > 8_000_000) return json({ ok: false, erro: 'grande demais' }, 413);
     const p = JSON.parse(raw);
