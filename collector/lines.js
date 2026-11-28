@@ -4,7 +4,7 @@
 import { getJSON } from './http.js';
 
 // nome de cada casa como aparece no bot e no app
-export const HOUSE_NAME = { '99play': '99play', farra: 'Farra', betano: 'Betano', bet365: 'Bet365', superbet: 'Superbet' };
+export const HOUSE_NAME = { '99play': '99play', farra: 'Farra', finta: 'Finta', betano: 'Betano', bet365: 'Bet365', superbet: 'Superbet' };
 const MAX_AGE = 18 * 3600e3; // rede de segurança: sem foto nova, usa a última por até 18 horas
 export const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 const STOP = new Set(['fc', 'cf', 'sc', 'ac', 'afc', 'ssc', 'as', 'rc', 'cd', 'ec', 'se', 'club', 'de', 'do', 'da', 'the', 'and', 'calcio', 'fk', '1', 'u']);

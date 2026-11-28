@@ -164,7 +164,7 @@ async function leitores() {
   const rows: any[] = await sb('rpc/latest_lines', { method: 'POST', body: '{}' }).catch(() => []) ?? [];
   const flags: any[] = await sb('bot_config?key=like.LEITOR:*&select=key,value').catch(() => []) ?? [];
   const flag = Object.fromEntries(flags.map(f => [f.key.slice(7), f.value])), out: string[] = [];
-  const NAME: Record<string, string> = { '99play': '99play', farra: 'Farra' };
+  const NAME: Record<string, string> = { '99play': '99play', farra: 'Farra', finta: 'Finta' };
   for (const r of rows) {
     const age = Date.now() - Date.parse(r.taken_at), stopped = age >= 2 * 3600e3, was = flag[r.house] === 'parado';
     if (stopped === was) continue;
